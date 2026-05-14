@@ -30,21 +30,16 @@ jobs:
 
       - name: Type check
         run: |
-          echo "=== tsc version ==="
-          node_modules/.bin/tsc --version
-          echo "=== source files ==="
-          find src -name '*.ts' -not -path '*/__tests__/*' | sort
-          echo "=== tsc ==="
-          node_modules/.bin/tsc --noEmit 2>tsc-errors.txt; ec=$?
-          cat tsc-errors.txt
+          node_modules/.bin/tsc --noEmit 2>&1 | tee tsc-output.txt; ec=${PIPESTATUS[0]}
           echo "EXIT_CODE=$ec"
+          {
+            echo '```'
+            cat tsc-output.txt
+            echo ''
+            echo '```'
+            echo "Exit code: $ec"
+          } >> $GITHUB_STEP_SUMMARY
           exit $ec
-      - name: Upload tsc error log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tsc-errors
-          path: static-analysis-plugin/tsc-errors.txt
 
       - name: Run tests
         run: bun test
