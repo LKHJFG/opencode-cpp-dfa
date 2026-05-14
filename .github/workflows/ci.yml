@@ -28,8 +28,11 @@ jobs:
 
       - run: bun install
 
-      - run: bun run type-check
+      - name: Type check
+        run: bun tsc --noEmit
 
-      - run: bun test
+      - name: Run tests
+        run: bun test
 
-      - run: bun build
+      - name: Build
+        run: bun run build
