@@ -14,13 +14,13 @@ export { type BlockId, type Statement, type BasicBlock, type ControlFlowGraph, p
 
 // Matches variable declarations: int a; int a = 10; int a = b + 1;
 // Also handles: MyClass obj; std::vector<int> v; unsigned long long x; const int* p;
-const DECL_PATTERN = /\b(?:(?:const|unsigned|signed|long|short)\s+)*(?:int|float|double|char|bool|auto|string|void|size_t|std::\w+(?:::\w+)*(?:<[^>]*>)?|[A-Za-z_]\w*(?:<[^>]*>)?)\s*\*{0,2}\s*&?\s*(\w+)\s*(?:=\s*([^;{]+))?/
+const DECL_PATTERN = /\b(?:(?:constexpr|const|unsigned|signed|long|short|static)\s+)*(?:int|float|double|char|bool|auto|string|void|size_t|std::\w+(?:::\w+)*(?:<[^>]*>+)?|[A-Za-z_]\w*(?:<[^>]*>+)?)\s*\*{0,2}\s*&?\s*(\w+)\s*(?:=\s*([^;{]+))?/
 
 // Matches plain assignments: a = b + 1; a += 2; *ptr = val; arr[idx] = val; ptr->member = val;
-const ASSIGN_PATTERN = /^(\*?\s*\w+(?:\s*\.\s*\w+(?:\[[^\]]*\])?)*(?:\s*->\s*\w+(?:\[[^\]]*\])?)?(?:\[[^\]]*\])?)\s*([+\-*/%&|^<>]=?|=(?!=))\s*([^;]*)/
+const ASSIGN_PATTERN = /^(\*{0,2}\s*\w+(?:\s*\.\s*\w+(?:\[[^\]]*\])?)*(?:\s*->\s*\w+(?:\[[^\]]*\])?)?(?:\[[^\]]*\])?)\s*([+\-*/%&|^<>]=?|=(?!=))\s*([^;]*)/
 
 // Matches function calls: foo(a, b); obj.method(); ptr->method(x);
-const FUNC_CALL_PATTERN = /((?:\w+(?:\.\w+)*(?:->\w+)?))\s*\(([^)]*)\)/
+const FUNC_CALL_PATTERN = /((?:\w+(?:\.\w+)*(?:->\w+)?)(?:\s*<[^>]*>+)?)\s*\(((?:[^()]+|\([^()]*\))*)\)/
 
 // Matches control flow keywords
 const CONTROL_KEYWORDS = /\b(if|else|for|while|switch|case|break|continue|return|goto)\b/
@@ -30,6 +30,25 @@ const CPP_TYPES = new Set([
   "int", "float", "double", "char", "bool", "auto", "string",
   "void", "size_t", "long", "short", "unsigned", "signed", "const",
 ])
+
+/**
+ * Normalize an lvalue expression to its root variable name.
+ * Strips pointer dereferences, array subscripts, and member access.
+ *   *ptr         → ptr
+ *   **ptr        → ptr
+ *   arr[0]       → arr
+ *   ptr->member  → ptr
+ *   *ptr->member → ptr
+ *   obj.member   → obj
+ *   a            → a
+ */
+function normalizeDefVar(lval: string): string {
+  let result = lval.trim()
+  result = result.replace(/^\s*\*+/, '')
+  result = result.replace(/\[.*?\]/g, '')
+  result = result.replace(/(?:->|\.).*$/, '')
+  return result.trim()
+}
 
 // ============================================================
 // Variable Extraction Utilities
@@ -72,7 +91,7 @@ function parseLine(line: string, lineNum: number): Statement | null {
     trimmed === "" ||
     trimmed.startsWith("//") ||
     trimmed.startsWith("/*") ||
-    trimmed.startsWith("*") ||
+    (trimmed.startsWith("*") && (trimmed.length === 1 || trimmed[1] === " " || trimmed[1] === "/")) ||
     trimmed.startsWith("#") ||
     trimmed.startsWith("}")
   ) {
@@ -110,7 +129,11 @@ function parseLine(line: string, lineNum: number): Statement | null {
   }
 
   // Variable declaration: int a = expr;
-  const declMatch = code.match(DECL_PATTERN)
+  let declMatch = code.match(DECL_PATTERN)
+  if (declMatch && declMatch.index != null) {
+    const afterDecl = code.slice(declMatch.index + declMatch[0].length).trim()
+    if (declMatch.index !== 0 || !afterDecl.startsWith(";")) { declMatch = null }
+  }
   if (declMatch) {
     const varName = declMatch[1]!
     const initExpr = declMatch[2]
@@ -134,7 +157,7 @@ function parseLine(line: string, lineNum: number): Statement | null {
       text: code,
       line: lineNum,
       column: trimmed.indexOf(code[0]!) + 1,
-      defVars: [target],
+      defVars: [normalizeDefVar(target)],
       useVars: extractUsedVars(rhs),
     }
   }

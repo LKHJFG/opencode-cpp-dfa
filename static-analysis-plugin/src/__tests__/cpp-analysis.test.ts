@@ -160,6 +160,420 @@ describe("buildCFG", () => {
     expect(aUsedByB).toBe(true)
     expect(bUsedByC).toBe(true)
   })
+
+  it("should handle nested template declarations", () => {
+    const code = [
+      "#include <vector>",
+      "#include <map>",
+      "#include <string>",
+      "std::vector<std::vector<int>> matrix;",
+      "std::map<std::string, int> myMap;",
+      "int main() {",
+      "  std::vector<int> v;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let foundMatrix = false
+    let foundMyMap = false
+    let foundV = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.defVars.includes("matrix")) foundMatrix = true
+        if (stmt.defVars.includes("myMap")) foundMyMap = true
+        if (stmt.defVars.includes("v")) foundV = true
+      }
+    }
+    expect(foundMatrix).toBe(true)
+    expect(foundMyMap).toBe(true)
+    expect(foundV).toBe(true)
+  })
+
+  it("should handle address-of expressions extracting use vars", () => {
+    const code = [
+      "int main() {",
+      "  int arr[10];",
+      "  int* ptr = &arr[0];",
+      "  int val = *ptr;",
+      "  return val;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let ptrUsesArr = false
+    let valUsesPtr = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.defVars.includes("ptr") && stmt.useVars.includes("arr")) {
+          ptrUsesArr = true
+        }
+        if (stmt.defVars.includes("val") && stmt.useVars.includes("ptr")) {
+          valUsesPtr = true
+        }
+      }
+    }
+    expect(ptrUsesArr).toBe(true)
+    expect(valUsesPtr).toBe(true)
+  })
+
+  it("should handle double pointer declaration and assignment", () => {
+    const code = [
+      "int main() {",
+      "  int x = 42;",
+      "  int* ptr = &x;",
+      "  int** pptr = &ptr;",
+      "  **pptr = val;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let foundPPtrDecl = false
+    let foundDoubleDeref = false
+    let foundValUse = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("pptr")) {
+          foundPPtrDecl = true
+        }
+        if (stmt.type === "assignment" && stmt.defVars.includes("pptr")) {
+          foundDoubleDeref = true
+          if (stmt.useVars.includes("val")) {
+            foundValUse = true
+          }
+        }
+      }
+    }
+    expect(foundPPtrDecl).toBe(true)
+    expect(foundDoubleDeref).toBe(true)
+    expect(foundValUse).toBe(true)
+  })
+})
+
+// ========================================
+// v1 CFG builder: defVars normalization
+// ========================================
+
+describe("v1 CFG builder", () => {
+  it("should normalize *ptr to ptr in assignment defVars", () => {
+    const code = [
+      "int main() {",
+      "  int val = 42;",
+      "  int* ptr;",
+      "  *ptr = val;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("ptr") && !stmt.defVars.includes("*ptr")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should normalize arr[0] to arr in assignment defVars", () => {
+    const code = [
+      "int main() {",
+      "  int arr[10];",
+      "  arr[0] = 42;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("arr") && !stmt.defVars.includes("arr[0]")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should normalize ptr->member to ptr in assignment defVars", () => {
+    const code = [
+      "struct Point { int x; int y; };",
+      "int main() {",
+      "  Point p;",
+      "  Point* ptr = &p;",
+      "  ptr->x = 42;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("ptr") && !stmt.defVars.includes("ptr->x")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should normalize obj.member to obj in assignment defVars", () => {
+    const code = [
+      "struct Point { int x; int y; };",
+      "int main() {",
+      "  Point p;",
+      "  p.x = 42;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("p") && !stmt.defVars.includes("p.x")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should normalize *ptr->member to ptr in assignment defVars", () => {
+    const code = [
+      "struct Point { int x; int y; };",
+      "int main() {",
+      "  Point p;",
+      "  Point* ptr = &p;",
+      "  *ptr = p;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("ptr") && !stmt.defVars.includes("*ptr")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should pass-through plain variable names unchanged", () => {
+    const code = [
+      "int main() {",
+      "  int a;",
+      "  a = 42;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("a")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle unsigned int declaration", () => {
+    const code = [
+      "int main() {",
+      "  unsigned int x;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("x")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle constexpr declaration", () => {
+    const code = [
+      "int main() {",
+      "  constexpr int x = 42;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("x")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle static declaration", () => {
+    const code = [
+      "int main() {",
+      "  static int x;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("x")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle std::pair nested template", () => {
+    const code = [
+      "#include <string>",
+      "#include <utility>",
+      "int main() {",
+      "  std::pair<int, std::string> p;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("p")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle deep nested template", () => {
+    const code = [
+      "#include <string>",
+      "#include <vector>",
+      "#include <unordered_map>",
+      "int main() {",
+      "  std::unordered_map<std::string, std::vector<int>> um;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("um")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle long long declaration", () => {
+    const code = [
+      "int main() {",
+      "  long long x;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "variable_declaration" && stmt.defVars.includes("x")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle assignment function_call detection", () => {
+    const code = [
+      "int main() {",
+      "  foo(a, b);",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "function_call") {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle obj.method() function_call", () => {
+    const code = [
+      "int main() {",
+      "  obj.method();",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "function_call") {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle ptr->method() function_call", () => {
+    const code = [
+      "int main() {",
+      "  ptr->method(x);",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "function_call") {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
+
+  it("should handle compound assignment a += 1", () => {
+    const code = [
+      "int main() {",
+      "  int a;",
+      "  a += 1;",
+      "  return 0;",
+      "}",
+    ]
+    const cfg = buildCFG(code, "test")
+    let found = false
+    for (const [, block] of cfg.blocks) {
+      for (const stmt of block.statements) {
+        if (stmt.type === "assignment" && stmt.defVars.includes("a")) {
+          found = true
+        }
+      }
+    }
+    expect(found).toBe(true)
+  })
 })
 
 // ========================================

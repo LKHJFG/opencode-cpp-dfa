@@ -5,13 +5,17 @@
 
 ---
 
-## [v0.5.0] — 2026-05-13
+## [v0.5.0] — 2026-05-14
 
 ### Infrastructure
 - **Git 仓库初始化** (`599c283`): `.gitignore` (node_modules, dist, .test-tmp, .sisyphus) + 88 文件初始 commit
 - **ADR 路径修正**: `static-analysis-plugin/adr/` → `adr/` 根目录
+- **项目重命名** (`1229e27`): `static-analysis-plugin` → `opencode-cpp-dfa`
+- **CI/CD 文件就绪** (`1229e27`): `.github/workflows/ci.yml` + `release.yml`；`.gitattributes` 添加
+- **`*.tgz` 加入 .gitignore** (`40cdbf8`): 防止构建产物误提交
 
 ### Refactored
+- **CFG 类型抽取**: `cpp-cfg.ts` → 将共享类型定义抽到 `cfg-types.ts`，两文件共同引用，消除重复 (~14.6KB → ~380 行)
 - **路径 B - 引擎可观测性**: `TraceResult` 新增 `engineUsed` 字段，追踪结果可知来自 v4/v3/v2/v1 哪一层
 - **路径 B - WASM 鲁棒性**: 新增 `static-analysis-plugin/node_modules/` 路径兜底 + debug 日志
 - **路径 B - AST 复用**: v3 失败时 v2 不再重复解析 C++——一次解析，三层复用（177 tests ✅ / tsc ✅）

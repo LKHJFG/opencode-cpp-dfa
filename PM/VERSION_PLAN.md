@@ -11,7 +11,7 @@
 | **v0.1.0** | Phase 0-1 (MVP) | ✅ 完成 | 插件骨架、4 基础工具、55 tests |
 | **v0.2.0** | Phase 2 (Basic Analysis) | ✅ 完成 | 导入分析/复杂度/未使用导出、55 tests |
 | **v0.3.0** | Phase 3 起点 (DFA) | ✅ 完成 | C++ DFA v3 跨函数、三层管线、125 tests |
-| **v0.4.x** | Phase 3 深入 (Cross-File) | ✅ **当前 (v0.4.5)** | 跨文件引擎、别名链追踪、void 函数参前向追踪、**177 tests / 0 fail** |
+| **v0.4.x** | Phase 3 深入 (Cross-File) | ✅ **已完成** | 跨文件引擎、别名链追踪、void 函数参前向追踪、**177 tests / 0 fail** |
 | **v0.5.0** | Phase 3 完成 | ✅ **已完成** | 跨文件前向链去重、指针链增强、循环保护 |
 | **v0.6.0** | Phase 4 (Polish) | ⬜ **下一个** | 性能优化、多语言、报表生成、CI/CD 集成 |
 
@@ -77,17 +77,18 @@
 
 ---
 
-## 已完成版本
-
 ### v0.5.0 — 完整追踪能力 (Phase 3 完成)
 **里程碑**: 177 tests / 0 fail / 588 expect / 10 files
 
 | 工作包 | 说明 | 优先级 | 状态 |
 |--------|------|--------|------|
-| 跨文件前向链去重 | R8 关闭：remove 递归 re-entry | P1 | ✅ |
+| 跨文件前向链去重 + 循环保护 | R8 关闭 + `enteredFuncs` Set | P1 | ✅ |
 | 指针链 value→ptr→pptr | `pointer_assign` 边 | P2 | ✅ |
-| 跨文件循环保护 | `enteredFuncs` Set | P2 | ✅ |
-| 强化测试断言 | +26 expect | P2 | ✅ |
+| 强化测试断言 | SectionB/G/H +26 expect | P2 | ✅ |
+| CFG 类型抽取 + 重构 | `cfg-types.ts` 共享类型，两文件减负 | P2 | ✅ |
+| WASM 鲁棒性 + 引擎可观测性 + AST 复用 | fallback 路径 + `engineUsed` + 一次解析三层复用 | P2 | ✅ |
+| 复杂表达式解析增强 (R5) | 模板/自定义类型/指针/数组/方法调用 | P2 | ✅ |
+| Git 初始化 + CI/CD 文件就绪 | `git init` + `.github/workflows/` + `.gitattributes` | P2 | ✅ |
 
 ---
 
@@ -98,12 +99,11 @@
 
 | 工作包 | 说明 | 优先级 |
 |--------|------|--------|
-| **表达式解析增强** | `&arr[i]`, `*ptr++` 等复杂表达式 | P1 |
+| **表达式解析遗留** | `&arr[i]`, `*ptr++`, `**ptr` 等残差表达式 | P3 |
 | **性能优化** | 大项目（100+ 文件）分析加速 | P2 |
 | **增量分析** | 仅重分析变更文件 | P2 |
 | **多语言支持** | TypeScript/Go/Rust 的 DFA 管线 | P3 |
 | **报表生成** | HTML/JSON/SARIF 格式 | P3 |
-| **CI/CD 集成** | GitHub Actions 自动分析 | P3 |
 | **用户文档** | API 文档 + 使用指南 | P3 |
 
 ---

@@ -1,6 +1,6 @@
 # 项目状态仪表盘
 
-> 更新日期: 2026-05-14 | 项目: `static-analysis-plugin` in `plugin4opencode` | 版本 v0.5.0
+> 更新日期: 2026-05-14 | 项目: `opencode-cpp-dfa` | 版本 v0.5.0
 
 ---
 
@@ -13,7 +13,7 @@
 | **构建** | `bun run tsc --noEmit` ✅ / `bun build` ✅ | 🟢 |
 | **WASM** | wasmAvailable=true, resolveWasmPaths() ✅ | 🟢 |
 | **注册工具** | 8 个（含 trace_variable） | 🟢 |
-| **Git** | ✅ **已初始化** — 8 commits on `master` | 🟢 |
+| **Git** | ✅ **已初始化** — 10 commits on `master` | 🟢 |
 | **远程仓库** | ❌ **网络不通** — `opencode-cpp-dfa` 本地已就绪，待 GitHub 网络通畅时推送 | 🔴 |
 | **CI/CD** | ⏳ **文件就绪** — `.github/workflows/ci.yml` + `release.yml`，待远程推送后自动生效 | 🟡 |
 | **未解决问题** | 1 个已知限制（P3 x1） | 🟡 |
@@ -58,7 +58,8 @@
 | `src/tools/cpp/variable-trace.ts` | ~401 | 主入口，三级 fallback | 2026-05-13 |
 | `src/tools/cpp/cross-function-dfa.ts` | ~435 | v3 跨函数引擎 | 2026-05-13 |
 | `src/tools/cpp/ast-to-cfg.ts` | ~17,952 | v2 AST→CFG | 2026-05-11 |
-| `src/tools/cpp/cpp-cfg.ts` | ~14,620 | v1 行扫描 CFG | 2026-05-11 |
+| `src/tools/cpp/cpp-cfg.ts` | ~380 | v1 行扫描 CFG | 2026-05-14 |
+| `src/tools/cpp/cfg-types.ts` | ~55 | CFG 共享类型定义 | 2026-05-14 |
 | `src/tools/cpp/cpp-dataflow.ts` | ~527 | DFA 引擎（通用） | 2026-05-11 |
 | `src/tools/cpp/cpp-parser.ts` | ~150 | WASM 包装器 | 2026-05-11 |
 
@@ -71,6 +72,10 @@
 | P8-A | 跨文件前向链去重 (R8) + 循环保护 | ✅ **完成** | v0.5.0 |
 | P8-B | 指针链 value→ptr→pptr (pointer_assign 边) | ✅ **完成** | v0.5.0 |
 | P8-C | 强化 SectionB/G/H 测试断言 | ✅ **完成** | v0.5.0 |
+| P8-D | CFG 类型抽取 + 重构 (`cfg-types.ts`) | ✅ **完成** | v0.5.0 |
+| P8-E | WASM 鲁棒性 + 引擎可观测性 + AST 复用 | ✅ **完成** | v0.5.0 |
+| P8-F | 复杂表达式解析增强 (R5) | ✅ **完成** | v0.5.0 |
+| P8-G | Git 初始化 + CI/CD 文件就绪 | ✅ **完成** | v0.5.0 |
 
 ---
 
@@ -78,6 +83,7 @@
 
 | 风险 | 等级 | 影响 | 缓解 |
 |------|------|------|------|
-| 非 git 仓库 | 🔴 | 无版本历史、无法回退、无法分支管理 | 初始化 git 仓库 |
-| WASM 测试环境路径 | 🟡 | 测试中 WASM 初始化失败自动降级 v1 | 生产环境无此问题 |环 |
-| 无 CI/CD | 🟡 | 无法自动化测试和部署 | v0.6.0 规划 |
+| R4 WASM 测试环境路径解析 | 🟡 中 | 测试环境 WASM 初始化可能失败 | ✅ v0.5.0 增强：`static-analysis-plugin/node_modules/` fallback + debug 日志 |
+| R5 复杂表达式解析遗留 (v1 正则) | 🟢 低 | `&arr[idx]`, `**ptr`, 嵌套模板等不支持 | ✅ v0.5.0 已增强；遗留项列为 P3 |
+| R6 无 CI/CD 流程 (网络不通) | 🟡 中 | 无法自动化测试/部署 | ⬜ `.github/workflows/` 已就绪，待网络通时推送 |
+| R7 Team mode EPERM (Windows) | 🟡 中 | 团队协作启动失败 | ✅ 已知：改用 `subagent_type=general` 绕过 |
