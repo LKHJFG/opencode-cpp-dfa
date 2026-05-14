@@ -32,4 +32,10 @@ jobs:
 
       - run: bun run build
 
-      - run: bun test
+      - run: bun test >test-out.txt 2>&1; ec=$?; cat test-out.txt; echo "TEST_EXIT=$ec"; exit $ec
+      - name: Upload test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-out
+          path: static-analysis-plugin/test-out.txt
