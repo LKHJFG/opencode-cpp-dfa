@@ -1,0 +1,8 @@
+{
+  "name": "static-analysis-plugin",
+  "version": "0.5.0",
+  "description": "Static code analysis plugin for OpenCode",
+  "author": "Sisyphus",
+  "entry": "./dist/index.js",
+  "hooks": ["tool"]
+}

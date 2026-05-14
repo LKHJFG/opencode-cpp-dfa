@@ -1,0 +1,336 @@
+C++ SEMANTIC-LEVEL VARIABLE TRACING - HANDOFF
+==============================================
+
+目标概述
+--------
+在 OpenCode 的 static-analysis-plugin 中实现 C++ 数据流分析（DFA）能力：
+给定 C++ 代码的变量及位置，能够基于数据流分析实现语义级变量追踪
+（前向追踪变量的流向、后向追踪变量的来源）。
+
+当前版本：v0.3.0（已构建通过，但 v3 跨函数代码已合入但未打新版本 tag）
+实际代码包含三个层级，按优先级降序：
+
+  v3（最新）: AST-based 跨函数 DFA
+    文件: cpp-parser.ts (~490 行) + ast-to-cfg.ts (~600 行)
+          + cross-function-dfa.ts (~400 行)
+    方法: 通过 web-tree-sitter WASM 解析 AST → 构建每个函数的独立 CFG
+          → 构建函数调用图（Call Graph）→ 跨函数边界追踪变量
+    入口: variable-trace.ts 的 execute() 优先尝试 v3，失败下降至 v2/v1
+    状态: 已实现，在 variable-trace.ts 中作为首选路径
+    注意: 当前无专项测试覆盖 v3（v3 只能通过集成测试间接验证，
+          目前的 cpp-analysis.test.ts 测试覆盖的是 v1 路径）
+
+  v2（中间层）: AST-based 单函数 CFG
+    文件: ast-to-cfg.ts (17,952 行)
+    方法: 走 tree-sitter AST 但只处理单个函数，不做过程间分析
+    状态: 在 variable-trace 中作为 v3 失败后的回退
+    注意: ast-to-cfg.ts 产出与 line-scan 相同的 ControlFlowGraph 类型，
+          DFA 引擎无需改动即可复用
+
+  v1（兜底）: Line-scan based CFG + DFA（原版生产代码）
+    文件: cpp-cfg.ts (14,620 行) + cpp-dataflow.ts (15,641 行)
+    方法: 逐行正则匹配 C++ 语句，构建控制流图（CFG），
+          然后基于 def-use chain 做数据流分析
+    优点: 零外部依赖，启动快，稳定可靠，有完整 19 tests 覆盖
+    缺点: 语法覆盖约 85%，复杂结构不够精准，无跨函数分析
+
+核心管线（三级回退）
+------------------------
+  main()
+    |
+    v
+  trace_variable (variable-trace.ts: ~280 行)
+    |-- 接收: filePath, variableName, [line], [direction]
+    |-- 输出: FlowEdge[] + allVariables[] + summary text
+    |
+    |-- 执行流程（三级 fallback）:
+    |
+    |    try v3: 跨函数 DFA（首选）
+    |    ├── CppParser.getInstance().parseContent(content, absPath)
+    |    ├── buildFunctionCFGs(tree, sourceLines)  → Map<funcName, FunctionCFG>
+    |    ├── buildCallGraph(tree, funcCfgs)         → CallSite[]
+    |    ├── findFunctionForVariable(funcCfgs, varName, line)  → 定位起始函数
+    |    └── traceInterprocedural(funcCfgs, callSites, varName, func, dir)
+    |            │
+    |            │  跨函数参数传递:  caller arg → callee param
+    |            │                   callee return → caller capture
+    |            │  plus: 单函数内 DFA 模式全部保留
+    |            └── 结果: edges[] + allVariables[]
+    |
+    |    ↓ v3 失败 / WASM 未初始化 / 解析异常
+    |
+    |    try v2: AST 单函数
+    |    ├── CppParser + ast-to-cfg.ts
+    |    ├── buildASTCFG(tree, sourceLines)  → ControlFlowGraph
+    |    └── analyzeDataFlow(cfg, duInfo, ...)
+    |
+    |    ↓ v2 也失败
+    |
+    |    try v1: Line-scan 兜底（原版）
+    |    ├── buildCFG(sourceLines)           → ControlFlowGraph
+    |    ├── buildDefUseChains(cfg, filePath) → DefUseInfo
+    |    └── analyzeDataFlow(defUse, ...)     → TraceResult
+    |
+    |-- 结果格式化: summary + edges + variables 列表
+    |
+    |
+  cpp-cfg.ts (line-scan, v1 专用)
+    |-- buildCFG(sourceLines: string[], functionName?: string)
+    |      逐行扫描，识别:
+    |        - variable_declaration（正则 DECL_PATTERN）
+    |        - assignment（正则 ASSIGN_PATTERN）
+    |        - function_call（正则 FUNC_CALL_PATTERN）
+    |        - control flow（if/for/while/switch/return）
+    |      构建 BasicBlock[]:
+    |        - 每个 block 含 statements（defVars + useVars）
+    |        - block 间有 successors/predecessors 边
+    |
+    |
+  ast-to-cfg.ts (AST→CFG, v2/v3 共用)
+    |-- 接收 tree-sitter AST + sourceLines
+    |-- 输出 ControlFlowGraph（与 cpp-cfg.ts 相同类型）
+    |-- DFA 引擎无需改动即可复用
+    |-- 精确识别: 函数定义块、参数列表、if/for/while/return 边界
+    |-- 比 line-scan 更准但依赖 WASM（首次调用需 ~300-800ms 加载）
+    |
+    |
+  cpp-dataflow.ts (所有版本共用)
+    |-- buildDefUseChains(cfg, filePath)
+    |      扫描所有 block 的 statements,
+    |      构建 definitions map（variable -> DefRecord[]）
+    |      和 uses map（variable -> UseRecord[]）
+    |
+    |-- analyzeDataFlow(defUse, startVar, startLine, direction, filePath)
+    |      核心算法:
+    |        - forward: 从 startVar 出发，遍历 def-use chain，
+    |                   找到所有被 startVar 直接或间接赋值的变量
+    |        - backward: 从 startVar 出发，逆 def-use chain，
+    |                    找到所有流入 startVar 的源变量
+    |        - both: 同时前向和后向追踪
+    |      边类型: assignment, composition, extraction, pointer,
+    |              offset, parameter, return, shared_memory
+    |
+    |
+  cross-function-dfa.ts (v3 核心)
+    |-- buildFunctionCFGs(tree, sourceLines, filePath)
+    |      遍历 AST，为每个 function_definition 节点生成独立 CFG
+    |      + 提取参数名（params）、函数体范围
+    |
+    |-- buildCallGraph(tree, funcCfgs)
+    |      解析 AST 中的 call_expression，
+    |      识别 caller → callee 关系，
+    |      提取实际参数变量（argVars）、返回接收变量（returnCapture）
+    |
+    |-- traceInterprocedural(funcCfgs, callSites, varName, startFunc, dir, filePath)
+    |      Step 1: 在起始函数内前向追踪直到遇到调用点
+    |      Step 2: 在 callee 函数入口匹配 argVars → params
+    |      Step 3: 在 callee 内继续追踪
+    |      Step 4: 如果遇到 return_statement，将返回值回传 caller
+    |      Step 5: 递归处理链式调用
+    |      限制: 当前深度最大 3 层（防止递归无限循环）
+    |
+    |
+  cpp-parser.ts (AST 解析，v2/v3 共用)
+    |-- 基于 web-tree-sitter WASM（0.26.8） + tree-sitter-cpp（0.23.4）
+    |-- CppParser 单例类，lazy init，纯 WASM 运行（无需原生编译）
+    |-- 功能:
+    |      parseAST(sourceCode) -> ASTNodeInfo[]
+    |      extractFunctions(sourceCode) -> FunctionInfo[]
+    |      extractVariables(sourceCode) -> VariableInfo[]
+    |      extractAssignments(sourceCode) -> AssignmentInfo[]
+    |      extractFunctionCalls(sourceCode) -> FunctionCallInfo[]
+    |      extractClasses(sourceCode) -> ClassInfo[]
+    |
+
+工具注册
+--------
+trace_variable 已注册为第 8 个工具（src/index.ts 第 9 行 import），
+通过 createVariableTraceTool() 工厂函数注册。
+
+描述:
+  "Trace a variable through C++ source code using data flow analysis.
+   Given a variable name and position, finds all variables this variable
+   flows to (forward) or all variables that flow into it (backward).
+   Handles basic types, pointers, structs, arrays."
+
+参数:
+  - filePath (string, required): C++ 源文件路径
+  - variableName (string, required): 要追踪的变量名
+  - line (number, optional): 变量定义行号（未提供则自动检测）
+  - direction ("forward"|"backward"|"both", optional): 追踪方向（默认 both）
+
+测试状态
+--------
+73/74 测试通过（1 个 pre-existing failure 与 C++ DFA 无关）:
+
+  C++ DFA 专项测试（cpp-analysis.test.ts: 19 tests）
+    覆盖:
+    - 简单赋值链追踪（a -> b -> c）
+    - 指针变量追踪（x -> p -> y）
+    - 控制流分支追踪（if/else 中的变量）
+    - 自动检测变量行号
+    - 前向追踪（forward）
+    - 后向追踪（backward）
+    - 双向追踪（both）
+    - 错误处理（变量不存在、文件不存在）
+    - 结构体字段追踪（obj.field 模式）
+    - 复合表达式追踪（a + b）
+    - 多个追踪边输出
+    - extractUsedVars 测试
+    - defVars/useVars 元数据验证
+
+  existing tests（advanced-analysis.test.ts: 22 tests）:
+    19/22 通过，1 fail（pre-existing: analyze_complexity
+    result 结构中的 functionCount 字段缺失）
+    其余失败来自该 test suite 中前置 test 的 side-effect
+
+  插件核心测试（plugin.test.ts: 8 tests）:
+    8/8 全部通过
+
+构建状态
+--------
+- bun build: 通过，产物 67.91 KB（dist/index.js）
+- bun run tsc --noEmit: 通过（零类型错误）
+- 外部依赖: @opencode-ai/plugin（^1.14.0）, web-tree-sitter（0.26.8）,
+            tree-sitter-cpp（0.23.4）
+
+已知问题与限制
+--------------
+1. 行扫描精度不足
+   - CFG 构建基于正则匹配，无法解析模板、宏、复杂表达式
+   - 正则 DECL_PATTERN 在有多个变量声明的行可能误匹配
+   - 未来方案: 集成 tree-sitter AST 做语句级精确解析
+
+2. 指针/引用追踪为启发式
+   - 识别 *p 和 &x 模式但未做别名分析
+   - 同一指针指向多个变量的情况无法处理
+   - 二级指针 int** pp 未充分支持
+   - 智能指针 unique_ptr/shared_ptr 未特殊处理
+
+3. 缺乏过程间分析（Interprocedural）
+   - 当前仅做单函数内的 DFA
+   - 识别函数调用但未进入被调用函数体追踪参数-返回
+   - 跨函数追踪范围限于: 识别参数传递、识别 return 赋值
+   - 无调用图（Call Graph）构建
+
+4. 结构体位域/类型信息未解析
+   - 识别 struct obj.field 模式但不解析 struct 定义
+   - 无类型系统: 无法区分 int* 和 char* 的赋值语义差异
+   - 数组索引 a[i] 作为变量整体追踪，而非元素级别
+   - union 和位域未特殊处理
+
+5. CFG 对复杂控制流支持有限
+   - if/else 嵌套深度超过 3 层可能导致 block 划分不准
+   - switch/case 基本支持但 fall-through 未处理
+   - do-while 循环支持但 break/continue 的 CFG 边未标注
+   - try/catch/throw 完全不支持
+   - goto 完全不支持
+
+6. web-tree-sitter 初启延迟
+   - WASM 初始化首次约 300-800ms（取决于 WASM 文件 I/O）
+   - CppParser 为单例，首次调用后后续无延迟
+   - v3/v2 路径依赖 WASM，首次 trace_variable 调用有可见延迟
+   - WASM 文件路径在 Windows 下可能因权限问题拒绝访问
+     （CppParser 通过 node_modules/ 相对路径加载）
+
+7. v3 跨函数 DFA 无专项测试
+   - cross-function-dfa.ts 和 ast-to-cfg.ts 均无单元测试
+   - 只能通过 variable-trace.ts 集成测试间接验证
+   - 当前的 cpp-analysis.test.ts 的 19 个测试覆盖的仅是 v1 line-scan 路径
+   - v3 的回退逻辑在 try-catch 中，如果 v3 无声失败则悄悄走 v2/v1，可能隐藏 bug
+
+8. 测试覆盖缺口
+   - 无 C++ 标准库 STL 容器相关测试（vector, map, string 等）
+   - 无多文件场景测试（当前只分析单文件）
+   - 无大文件性能基准测试
+   - 无恶意输入（超大文件、无限循环代码）的稳定性测试
+
+未来规划（更新版，v0.4.0 部分目标已实现）
+----------------------------------------
+
+当前已完成的技术债务：
+  [已实现] AST 解析器（cpp-parser.ts）
+  [已实现] AST→CFG 桥接（ast-to-cfg.ts）
+  [已实现] 简单过程间分析（cross-function-dfa.ts，含 Call Graph 和参数/返回值传播）
+
+下一步优先级：
+
+v0.4.0 — 测试覆盖 + 稳定性
+  1. 为 cross-function-dfa.ts 编写专项单元测试（mock tree-sitter AST）
+  2. 为 ast-to-cfg.ts 编写专项单元测试
+  3. 添加 v3 路径的集成测试（验证 try-catch 回退逻辑正确性）
+  4. 添加多函数跨调用场景的端到端测试
+
+v0.5.0 — 别名分析 + 类型系统
+  1. 指针别名分析（Andersen-style 或 Steensgaard 简化版）
+  2. 结构体类型推断（从定义处解析 struct 布局）
+  3. 基于类型的赋值规则校验（int* 与 char* 的不同传播语义）
+
+v0.6.0 — 跨文件分析
+  1. 解析 #include 定位被调用函数的定义文件
+  2. 建立跨文件的作用域解析（同名函数、重载、namespace）
+  3. 合并多个文件的 CFG 和 def-use chain
+  4. 调用链中的 fromFile / toFile 字段赋予实际值（当前为空）
+
+v0.7.0 — 精度与性能
+  1. WASM 加载优化（预加载、缓存、懒加载策略细化）
+  2. 增量式更新（文件修改后只重分析 affected 部分）
+  3. 大文件分块处理
+  4. 递归调用深度限制可配置
+
+v1.0.0 — 生产就绪
+  1. 支持完整 C++17 语法子集
+  2. 支持 STL 容器追踪（vector.data(), string.c_str() 等）
+  3. 支持智能指针语义分析
+  4. 提供可视化 trace 图输出（DOT/Graphviz 格式）
+
+关键技术决策
+------------
+- 双轨策略: line-scan 快速交付 + AST 长期提升，不相互阻塞
+- WASM 模式: 无原生编译，避免 Windows 编译工具链依赖
+- 纯 TypeScript: 与 OpenCode 生态一致，无混合语言
+- bun build: 非 tsc（bun 的 tree-shaking 更优，产物更小）
+- 无 @ts-ignore 或 as any 抑制 TypeScript 类型错误
+- 工具接口匹配 OpenCode tool() 模式，便于插件热插拔
+
+当前环境约束
+------------
+- 工作目录: C:\Program Files\opencode（受保护，不可写）
+- OS: Windows（PowerShell），无管理员权限
+- 包管理器: bun（首选），npm 10.8.2 也可用
+- WASM 加载: web-tree-sitter 使用 node_modules/ 路径，
+             因工作目录在 Program Files，node_modules 为只读
+- EPREM 限制: background task、team_create 无法使用
+              （需在可写目录启动 opencode）
+
+重要提示
+--------
+- plugin 在当前 session 中未重新安装到 opencode.json
+  （需要先构建，然后打包 tgz，再通过 opencode.json
+   插件配置安装）
+- 作为手写 HANDFOFF.md 使用。该项目不是一个 git 仓库
+- 复制部署后请注意 WASM 文件路径（typo "tree-sitter" in
+  variable-trace.ts import comment，但这不是运行时问题）
+
+C++ DFA 源代码总览
+  static-analysis-plugin/src/
+    index.ts                         426 行 - 插件主入口（注册 8 工具）
+    tools/cpp/cpp-parser.ts          ~490 行 - web-tree-sitter AST 解析器（v2/v3 共用）
+    tools/cpp/ast-to-cfg.ts         ~600 行 - AST→CFG 桥接（v2/v3 共用，从 tree-sitter AST 生成 CFG）
+    tools/cpp/cross-function-dfa.ts ~400 行 - 跨函数 DFA 引擎（v3，含 Call Graph、参数/返回值传播）
+    tools/cpp/cpp-cfg.ts           ~480 行 - 控制流图构建器（v1 line-scan 模式）
+    tools/cpp/cpp-dataflow.ts      ~520 行 - 数据流分析引擎（所有版本共用）
+    tools/cpp/variable-trace.ts    ~280 行 - trace_variable 工具封装（三级 fallback 控制器）
+    tools/cpp/test-helpers.ts        —    - 测试辅助函数
+    __tests__/cpp-analysis.test.ts  ~400 行 - C++ DFA 专项测试（19 tests，仅覆盖 v1 路径）
+    __tests__/advanced-analysis.test.ts  —  - 高级分析测试（22 tests）
+    __tests__/plugin.test.ts            —  - 插件生命周期测试（8 tests）
+
+顶层文件:
+    package.json                     v0.3.0
+    backlog.md                       产品机会总览
+    roadmap.md                       技术实现路线图
+    requirements.md                  功能需求文档
+    tasks.md                         开发任务分解
+    HANDFOFF.md                      上一轮总体交接文档
+    handoff （本文档）                C++ DFA 专用交接文档

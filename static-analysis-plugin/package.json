@@ -1,0 +1,32 @@
+{
+  "name": "static-analysis-plugin",
+  "version": "0.5.0",
+  "description": "OpenCode plugin for static code analysis - Demo MVP",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "plugin.json"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --external @opencode-ai/plugin --external zod",
+    "type-check": "bun x tsc --noEmit",
+    "test": "bun test",
+    "package": "powershell Compress-Archive -Path dist/index.js,plugin.json,README.md -DestinationPath static-analysis-plugin.zip -Force"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.14.0",
+    "tree-sitter-cpp": "^0.23.4",
+    "web-tree-sitter": "^0.26.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "zod": "^3.23.0"
+  }
+}
