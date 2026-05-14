@@ -28,18 +28,7 @@ jobs:
 
       - run: bun install
 
-      - name: Type check
-        run: |
-          node_modules/.bin/tsc --noEmit 2>&1 | tee tsc-output.txt; ec=${PIPESTATUS[0]}
-          echo "EXIT_CODE=$ec"
-          {
-            echo '```'
-            cat tsc-output.txt
-            echo ''
-            echo '```'
-            echo "Exit code: $ec"
-          } >> $GITHUB_STEP_SUMMARY
-          exit $ec
+      - run: bun run tsc --noEmit
 
       - name: Run tests
         run: bun test
