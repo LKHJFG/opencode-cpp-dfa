@@ -143,6 +143,7 @@ export class CppParser {
     candidates.push(resolve(pluginDir, "node_modules/web-tree-sitter/web-tree-sitter.wasm"))
 
     candidates.push(resolve(process.cwd(), "node_modules/web-tree-sitter/web-tree-sitter.wasm"))
+    candidates.push(resolve(process.cwd(), "static-analysis-plugin/node_modules/web-tree-sitter/web-tree-sitter.wasm"))
 
     if (import.meta.dir) {
       let dir = import.meta.dir
@@ -154,6 +155,7 @@ export class CppParser {
     }
 
     const parserPath = candidates.find((p) => existsSync(p))
+    console.debug("WASM parser found at:", parserPath)
     if (!parserPath) {
       throw new Error(
         `Could not locate web-tree-sitter.wasm. Searched:\n${candidates.map((p) => `  - ${p}`).join("\n")}`

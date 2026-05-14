@@ -71,6 +71,7 @@ export interface TraceResult {
   allVariables: string[]
   summary: string
   filePath: string
+  engineUsed?: "v4" | "v3" | "v2" | "v1"
 }
 
 // ============================================================

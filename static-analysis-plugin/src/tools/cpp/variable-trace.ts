@@ -96,7 +96,7 @@ export function createVariableTraceTool(): any {
             startLine = findVariableLine(sourceLines, varName)
         }
 
-        let result: { edges: FlowEdge[]; allVariables: string[]; summary: string } | undefined = undefined
+        let result: { edges: FlowEdge[]; allVariables: string[]; summary: string; engineUsed?: "v4" | "v3" | "v2" | "v1" } | undefined = undefined
 
         // v4: Cross-file DFA (when directory is provided)
         if (args.directory) {
@@ -108,7 +108,7 @@ export function createVariableTraceTool(): any {
               if (!edge.fromFile) edge.fromFile = absPath
               if (!edge.toFile) edge.toFile = absPath
             }
-            result = xfResult
+            result = xfResult; result.engineUsed = 'v4'
           } catch (xfErr) {
             console.error("Cross-file analysis failed, falling back:", xfErr)
           }
@@ -116,12 +116,19 @@ export function createVariableTraceTool(): any {
 
         // Only run v3→v2→v1 if result wasn't set by v4
         if (!result) {
-        // Try v3 interprocedural (cross-function) DFA first
+        // Parse once, outside try — tree is reused by v2 if v3 analysis fails
+        let tree: any = null
         try {
           const parser = CppParser.getInstance()
           const parserResult = await parser.parseContent(content, absPath)
-          const tree = parserResult.tree
+          tree = parserResult.tree
+        } catch {
+          // parse failed, will fall through to v1
+        }
 
+        if (tree) {
+        // Try v3 interprocedural (cross-function) DFA first
+        try {
           // Build per-function CFGs
           const funcCfgs = buildFunctionCFGs(tree, sourceLines, absPath)
 
@@ -141,7 +148,7 @@ export function createVariableTraceTool(): any {
               edge.toFile = absPath
             }
 
-          result = ipResult
+          result = ipResult; result.engineUsed = 'v3'
         } else {
           // Single function — use existing v2 AST-based path
           const funcCfg = funcCfgs.values().next().value
@@ -152,25 +159,23 @@ export function createVariableTraceTool(): any {
             for (const edge of intraResult.edges) {
               edge.fromFile = absPath; edge.toFile = absPath
             }
-            result = intraResult
+            result = intraResult; result.engineUsed = 'v3'
           } else {
             throw new Error("No functions found")
           }
         }
           } catch {
-            // v2 fallback: AST-based single function
+            // v2 fallback: AST-based single function (reuses same parsed tree)
           try {
             const astToCfgModule = await getAstToCfg()
             if (astToCfgModule && astToCfgModule.buildASTCFG) {
-              const parser = CppParser.getInstance()
-              const parserResult = await parser.parseContent(content, absPath)
-              const cfg = astToCfgModule.buildASTCFG(parserResult.tree, parserResult.sourceLines)
+              const cfg = astToCfgModule.buildASTCFG(tree, sourceLines)
               const duInfo = buildDefUseChains(cfg, absPath)
               const intraResult = analyzeDataFlow(cfg, duInfo, varName, startLine, direction, absPath)
               for (const edge of intraResult.edges) {
                 edge.fromFile = absPath; edge.toFile = absPath
               }
-              result = intraResult
+              result = intraResult; result.engineUsed = 'v2'
             } else {
               throw new Error("AST-to-CFG not available")
             }
@@ -182,8 +187,18 @@ export function createVariableTraceTool(): any {
             for (const edge of intraResult.edges) {
               edge.fromFile = absPath; edge.toFile = absPath
             }
-            result = intraResult
+            result = intraResult; result.engineUsed = 'v1'
           }
+        }
+        } else {
+          // v1 fallback: no AST available (parse failed)
+          const cfg = buildCFG(sourceLines)
+          const duInfo = buildDefUseChains(cfg, absPath)
+          const intraResult = analyzeDataFlow(cfg, duInfo, varName, startLine, direction, absPath)
+          for (const edge of intraResult.edges) {
+            edge.fromFile = absPath; edge.toFile = absPath
+          }
+          result = intraResult; result.engineUsed = 'v1'
         }
         }
 
