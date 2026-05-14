@@ -32,14 +32,19 @@ jobs:
         run: |
           echo "=== tsc version ==="
           node_modules/.bin/tsc --version
-          echo "=== tsconfig ==="
-          cat tsconfig.json
           echo "=== source files ==="
           find src -name '*.ts' -not -path '*/__tests__/*' | sort
-          echo "=== tsc with verbose ==="
-          node_modules/.bin/tsc --noEmit --verbose 2>&1 || true
-          echo "=== tsc strict ==="
-          node_modules/.bin/tsc --noEmit 2>&1; ec=$?; echo "EXIT_CODE=$ec"; exit $ec
+          echo "=== tsc ==="
+          node_modules/.bin/tsc --noEmit 2>tsc-errors.txt; ec=$?
+          cat tsc-errors.txt
+          echo "EXIT_CODE=$ec"
+          exit $ec
+      - name: Upload tsc error log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsc-errors
+          path: static-analysis-plugin/tsc-errors.txt
 
       - name: Run tests
         run: bun test
