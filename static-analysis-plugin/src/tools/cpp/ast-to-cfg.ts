@@ -8,7 +8,7 @@
  * operates on ControlFlowGraph — zero changes needed.
  */
 
-import { type ControlFlowGraph, type BasicBlock, type BlockId, type Statement } from "./cpp-cfg"
+import { type ControlFlowGraph, type BasicBlock, type BlockId, type Statement } from "./cfg-types"
 import { type ParserResult } from "./cpp-parser"
 
 // ============================================================
