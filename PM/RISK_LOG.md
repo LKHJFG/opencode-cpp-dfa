@@ -8,7 +8,6 @@
 
 | # | 风险描述 | 等级 | 影响域 | 状态 | 缓解计划 |
 |---|---------|------|--------|------|---------|
-| R1 | **项目目录无 git 仓库** | 🔴 高 | 全项目 | ❌ 未处理 | `git init` 初始化 + `.gitignore` |
 | R4 | **WASM 测试环境路径解析** | 🟡 中 | 测试覆盖 | ✅ 已知 & 缓解 | 生产环境正常，测试时自动降级 v1 |
 | R5 | **&var 前缀剥离为字符串处理** | 🟢 低 | 表达式解析 | ⬜ v0.5.0 | `&arr[idx]` 等复杂表达式不支持 |
 | R6 | **无 CI/CD 流程** | 🟡 中 | 交付质量 | ⬜ v0.6.0 | GitHub Actions / 自动化测试 |
@@ -38,6 +37,7 @@
 | R-03 | `findVariableLine` 正则误匹配 `value` | 🟡 中 | v0.4.4 | 注释剥离 + `(?<!\.)` 负向后顾 |
 | R-04 | 跨文件后向 caller 找不到 | 🟡 中 | v0.4.4 | 遍历 workspace 所有文件 |
 | R8 | 跨文件前向链重复边 | 🟡 中 | v0.5.0 | 移除递归 re-entry + `enteredFuncs` 循环保护 |
+| R1 | **项目目录无 git 仓库** | 🔴 高 | v0.5.0 | `git init` + `.gitignore` + 初始 commit (599c283) |
 | R2 | **void 函数引用参数不产生数据边** | 🟡 中 | v0.4.5 | `traceInterprocedural` + `traceInFile` 前向 ref_param_out |
 | R3 | **maxDepth=3 硬编码** | 🟡 中 | v0.4.5 | `trace_variable` 工具参数化 |
 

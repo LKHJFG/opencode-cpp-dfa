@@ -1,6 +1,6 @@
 # 项目状态仪表盘
 
-> 更新日期: 2026-05-13 | 项目: `static-analysis-plugin` in `plugin4opencode` | 版本 v0.5.0
+> 更新日期: 2026-05-14 | 项目: `static-analysis-plugin` in `plugin4opencode` | 版本 v0.5.0
 
 ---
 
@@ -13,7 +13,7 @@
 | **构建** | `bun run tsc --noEmit` ✅ / `bun build` ✅ | 🟢 |
 | **WASM** | wasmAvailable=true, resolveWasmPaths() ✅ | 🟢 |
 | **注册工具** | 8 个（含 trace_variable） | 🟢 |
-| **Git** | ❌ **未初始化** — `C:\work\plugin4opencode` 不是 git 仓库 | 🔴 |
+| **Git** | ✅ **已初始化** — `599c283` on `master`, 88 files | 🟢 |
 | **未解决问题** | 1 个已知限制（P3 x1） | 🟡 |
 
 ---
