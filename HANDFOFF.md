@@ -259,10 +259,15 @@ p → val (cross_file_ref_modify)
 - `&arr[i]`, `*ptr++` 等复杂表达式解析增强
 
 ### ⬜ P2 — 工程化 (v0.6.0)
+- **远程推送**（待网络通时执行）: 
+  ```bash
+  git remote add origin https://github.com/LKHJFG/opencode-cpp-dfa.git
+  git push -u origin master
+  ```
+- CI/CD 文件已就绪（`.github/workflows/ci.yml` + `release.yml`），推送后自动生效
 - 性能优化（大项目 100+ 文件）
 - 增量分析
 - 多语言支持（TypeScript/Go/Rust）
-- CI/CD 集成
 - 用户文档（API 文档 + 使用指南）
 
 ---

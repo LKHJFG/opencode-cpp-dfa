@@ -13,7 +13,9 @@
 | **构建** | `bun run tsc --noEmit` ✅ / `bun build` ✅ | 🟢 |
 | **WASM** | wasmAvailable=true, resolveWasmPaths() ✅ | 🟢 |
 | **注册工具** | 8 个（含 trace_variable） | 🟢 |
-| **Git** | ✅ **已初始化** — `599c283` on `master`, 88 files | 🟢 |
+| **Git** | ✅ **已初始化** — 8 commits on `master` | 🟢 |
+| **远程仓库** | ❌ **网络不通** — `opencode-cpp-dfa` 本地已就绪，待 GitHub 网络通畅时推送 | 🔴 |
+| **CI/CD** | ⏳ **文件就绪** — `.github/workflows/ci.yml` + `release.yml`，待远程推送后自动生效 | 🟡 |
 | **未解决问题** | 1 个已知限制（P3 x1） | 🟡 |
 
 ---
