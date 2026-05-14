@@ -18,6 +18,9 @@ Thumbs.db
 .idea/
 .vscode/settings.json
 
+# Build artifacts
+*.tgz
+
 # Environment
 .env
 .env.local
