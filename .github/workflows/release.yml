@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+defaults:
+  run:
+    working-directory: static-analysis-plugin
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.13'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: static-analysis-plugin/node_modules
+          key: bun-${{ hashFiles('static-analysis-plugin/bun.lock') }}
+
+      - run: bun install
+
+      - run: bun run tsc --noEmit
+
+      - run: bun test
+
+      - run: bun build
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            static-analysis-plugin/dist/index.js
+            static-analysis-plugin/plugin.json

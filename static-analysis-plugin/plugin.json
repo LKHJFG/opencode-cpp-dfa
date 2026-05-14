@@ -1,5 +1,5 @@
 {
-  "name": "static-analysis-plugin",
+  "name": "opencode-cpp-dfa",
   "version": "0.5.0",
   "description": "Static code analysis plugin for OpenCode",
   "author": "Sisyphus",
