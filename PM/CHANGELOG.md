@@ -12,7 +12,9 @@
 - **ADR 路径修正**: `static-analysis-plugin/adr/` → `adr/` 根目录
 
 ### Refactored
-- **CFG 类型抽取**: `BlockId`, `Statement`, `BasicBlock`, `ControlFlowGraph`, `printCFG` 从 `cpp-cfg.ts` 抽出到新文件 `cfg-types.ts`；两 CFG 构建器统一引用共享类型（177 tests ✅ / tsc ✅）
+- **路径 B - 引擎可观测性**: `TraceResult` 新增 `engineUsed` 字段，追踪结果可知来自 v4/v3/v2/v1 哪一层
+- **路径 B - WASM 鲁棒性**: 新增 `static-analysis-plugin/node_modules/` 路径兜底 + debug 日志
+- **路径 B - AST 复用**: v3 失败时 v2 不再重复解析 C++——一次解析，三层复用（177 tests ✅ / tsc ✅）
 
 ### Added
 - `"pointer_assign"` 边类型：`FlowEdgeType` 新增，用于检测 `int* ptr = &value` 模式
