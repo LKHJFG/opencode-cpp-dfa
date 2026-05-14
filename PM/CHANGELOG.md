@@ -11,6 +11,9 @@
 - **Git 仓库初始化** (`599c283`): `.gitignore` (node_modules, dist, .test-tmp, .sisyphus) + 88 文件初始 commit
 - **ADR 路径修正**: `static-analysis-plugin/adr/` → `adr/` 根目录
 
+### Refactored
+- **CFG 类型抽取**: `BlockId`, `Statement`, `BasicBlock`, `ControlFlowGraph`, `printCFG` 从 `cpp-cfg.ts` 抽出到新文件 `cfg-types.ts`；两 CFG 构建器统一引用共享类型（177 tests ✅ / tsc ✅）
+
 ### Added
 - `"pointer_assign"` 边类型：`FlowEdgeType` 新增，用于检测 `int* ptr = &value` 模式
 - `traceInterprocedural`（v3）新增指针赋值检测扫描：检测 `&var` 模式并创建 `pointer_assign` 边

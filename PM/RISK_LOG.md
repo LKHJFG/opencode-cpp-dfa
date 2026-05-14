@@ -20,11 +20,7 @@
 
 | # | 债务描述 | 领域 | 引入版本 | 计划清理版本 |
 |---|---------|------|---------|------------|
-| T1 | `ast-to-cfg.ts` ~18K 行，体积过大 | v2 AST | v0.3.0 | v0.6.0（重构） |
-| T2 | line-scan 85% 语法覆盖（正则缺陷） | v1 DFA | v0.3.0 | v0.5.0（增强） |
-| T3 | `cpp-cfg.ts` ~14.6K 行，与 ast-to-cfg.ts 有重复 | v1 CFG | v0.3.0 | v0.6.0（合并） |
-| T4 | 测试断言偏弱（部分仅 `toBeDefined()`） | 测试质量 | v0.4.0 | ✅ v0.5.0 已强化 |
-| T5 | `handoff` 与 `HANDFOFF.md` 双源不一致 | 文档 | v0.4.3 | ✅ v0.4.4 已清理 |
+| T2 | line-scan 85% 语法覆盖（正则缺陷） | v1 DFA | v0.3.0 | v0.6.0（待规划） |
 
 ---
 
@@ -38,6 +34,17 @@
 | R-04 | 跨文件后向 caller 找不到 | 🟡 中 | v0.4.4 | 遍历 workspace 所有文件 |
 | R8 | 跨文件前向链重复边 | 🟡 中 | v0.5.0 | 移除递归 re-entry + `enteredFuncs` 循环保护 |
 | R1 | **项目目录无 git 仓库** | 🔴 高 | v0.5.0 | `git init` + `.gitignore` + 初始 commit (599c283) |
+
+---
+
+## 已关闭技术债务
+
+| # | 描述 | 原等级 | 关闭版本 | 关闭原因 |
+|---|------|--------|---------|---------|
+| T1 | `ast-to-cfg.ts` ~18KB 体积过大 (实际 478 行，原误将 bytes 记为行数) | 🟡 中 | v0.5.0 | 评估发现实际仅 478 行，非债务 |
+| T3 | `cpp-cfg.ts` ~14.6KB 与 ast-to-cfg.ts 有重复 (实际 427 行) | 🟡 中 | v0.5.0 | CFG 类型定义抽取到 `cfg-types.ts`，两文件共享类型，重复消除 |
+| T4 | 测试断言偏弱（部分仅 `toBeDefined()`） | 🟡 中 | v0.5.0 | SectionB/G/H 测试强化 |
+| T5 | `handoff` 与 `HANDFOFF.md` 双源不一致 | 🟡 中 | v0.4.4 | 已清理 |
 | R2 | **void 函数引用参数不产生数据边** | 🟡 中 | v0.4.5 | `traceInterprocedural` + `traceInFile` 前向 ref_param_out |
 | R3 | **maxDepth=3 硬编码** | 🟡 中 | v0.4.5 | `trace_variable` 工具参数化 |
 
