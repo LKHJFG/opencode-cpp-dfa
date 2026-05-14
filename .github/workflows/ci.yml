@@ -28,21 +28,7 @@ jobs:
 
       - run: bun install
 
-      - name: TS Check
-        id: tscheck
-        run: |
-          bun run tsc --noEmit >tsc-all.txt 2>&1; ec=$?
-          echo "=== TSC OUTPUT (stdout+stderr combined) ==="
-          cat tsc-all.txt
-          echo "=== TSC EXIT: $ec ==="
-          echo "tsc_exit=$ec" >> $GITHUB_OUTPUT
-          exit $ec
-      - name: Upload tsc error log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tsc-errors-v2
-          path: static-analysis-plugin/tsc-all.txt
+      - run: bun run tsc --noEmit
 
       - name: Run tests
         run: bun test
