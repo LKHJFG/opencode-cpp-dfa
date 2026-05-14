@@ -28,8 +28,13 @@ jobs:
 
       - run: bun install
 
+      - name: Debug node_modules
+        run: |
+          ls node_modules/.bin/ | head -20
+          node_modules/.bin/tsc --version 2>&1 || echo "tsc not found"
+          bun --version
       - name: Type check
-        run: bun tsc --noEmit
+        run: node_modules/.bin/tsc --noEmit 2>&1
 
       - name: Run tests
         run: bun test
