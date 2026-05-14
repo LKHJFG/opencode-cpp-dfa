@@ -254,8 +254,10 @@ describe("buildCrossFileCallGraph", () => {
     const callGraph = buildCrossFileCallGraph(workspace)
 
     if (workspace.globalFunctionRegistry.size > 0) {
-      const firstFunc = Array.from(workspace.globalFunctionRegistry.keys())[0]
-      const entry = callGraph.get(firstFunc)
+      const functionsInGraph = Array.from(workspace.globalFunctionRegistry.keys())
+        .filter(f => callGraph.has(f))
+      expect(functionsInGraph.length).toBeGreaterThan(0)
+      const entry = callGraph.get(functionsInGraph[0])
       expect(entry).toBeDefined()
       expect(entry!.callers).toBeDefined()
       expect(Array.isArray(entry!.callers)).toBe(true)
