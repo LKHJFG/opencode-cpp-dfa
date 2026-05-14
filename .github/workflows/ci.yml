@@ -28,7 +28,19 @@ jobs:
 
       - run: bun install
 
-      - run: bun run tsc --noEmit
+      - name: TS Check
+        run: |
+          bun run tsc --noEmit 2>&1 | tee ts-errors.log; ec=${PIPESTATUS[0]}
+          echo "tsc_exit=$ec" >> $GITHUB_ENV
+          if [ $ec -ne 0 ]; then
+            echo "### tsc errors" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat ts-errors.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          # Show exit in log regardless
+          echo "TSC_EXIT_CODE=$ec"
+          exit $ec
 
       - name: Run tests
         run: bun test
