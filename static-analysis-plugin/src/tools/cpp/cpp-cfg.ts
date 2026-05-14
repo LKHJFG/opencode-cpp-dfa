@@ -13,13 +13,14 @@ export { type BlockId, type Statement, type BasicBlock, type ControlFlowGraph, p
 // ============================================================
 
 // Matches variable declarations: int a; int a = 10; int a = b + 1;
-const DECL_PATTERN = /\b(?:int|float|double|char|bool|auto|string|void|size_t|long|short|unsigned|signed|const)\s*\*{0,2}\s*&?\s*(\w+)\s*(?:=\s*([^;{]+))?/
+// Also handles: MyClass obj; std::vector<int> v; unsigned long long x; const int* p;
+const DECL_PATTERN = /\b(?:(?:const|unsigned|signed|long|short)\s+)*(?:int|float|double|char|bool|auto|string|void|size_t|std::\w+(?:::\w+)*(?:<[^>]*>)?|[A-Za-z_]\w*(?:<[^>]*>)?)\s*\*{0,2}\s*&?\s*(\w+)\s*(?:=\s*([^;{]+))?/
 
-// Matches plain assignments: a = b + 1; a += 2;
-const ASSIGN_PATTERN = /^(\w+(?:\.\w+)*)\s*([+\-*/%&|^<>]=?|=(?!=))\s*([^;]*)/
+// Matches plain assignments: a = b + 1; a += 2; *ptr = val; arr[idx] = val; ptr->member = val;
+const ASSIGN_PATTERN = /^(\*?\s*\w+(?:\s*\.\s*\w+(?:\[[^\]]*\])?)*(?:\s*->\s*\w+(?:\[[^\]]*\])?)?(?:\[[^\]]*\])?)\s*([+\-*/%&|^<>]=?|=(?!=))\s*([^;]*)/
 
-// Matches function calls: foo(a, b);
-const FUNC_CALL_PATTERN = /(\w+)\s*\(([^)]*)\)/
+// Matches function calls: foo(a, b); obj.method(); ptr->method(x);
+const FUNC_CALL_PATTERN = /((?:\w+(?:\.\w+)*(?:->\w+)?))\s*\(([^)]*)\)/
 
 // Matches control flow keywords
 const CONTROL_KEYWORDS = /\b(if|else|for|while|switch|case|break|continue|return|goto)\b/

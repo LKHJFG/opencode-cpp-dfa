@@ -9,7 +9,7 @@
 | # | 风险描述 | 等级 | 影响域 | 状态 | 缓解计划 |
 |---|---------|------|--------|------|---------|
 | R4 | **WASM 测试环境路径解析** | 🟡 中 | 测试覆盖 | ✅ v0.5.0 增强 | 新增 `static-analysis-plugin/node_modules/` fallback + debug 日志；v2 复用已解析 AST，避免 v3→v2 重复解析 |
-| R5 | **&var 前缀剥离为字符串处理** | 🟢 低 | 表达式解析 | ⬜ v0.5.0 | `&arr[idx]` 等复杂表达式不支持 |
+| R5 | **复杂表达式解析（v1 正则）** | 🟢 低 | 表达式解析 | ✅ v0.5.0 已增强 | DECL: 模板/自定义/多词类型; ASSIGN: `*ptr`/`arr[i]`/`ptr->member`; FUNC_CALL: `obj.method()`/`ptr->method()`. 遗留: `&arr[idx]`, `**ptr`, 嵌套模板 |
 | R6 | **无 CI/CD 流程** | 🟡 中 | 交付质量 | ⬜ 文件已就绪，网络不通阻塞 | GitHub Actions 配置已完成 (`.github/workflows/ci.yml` + `release.yml`)，需 GitHub 网络通时执行 `git push` |
 | R7 | **Team mode EPERM (Windows)** | 🟡 中 | 团队协作 | ✅ 已知 | 改用 `subagent_type=general` 平行派发 |
 | R8 | **跨文件前向链重复边** | 🟡 中 | 追踪质量 | ✅ v0.5.0 已关闭 | 移除 `traceInFile` 递归 re-entry + `enteredFuncs` 循环保护 |

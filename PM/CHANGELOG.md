@@ -18,6 +18,7 @@
 
 ### Added
 - `"pointer_assign"` 边类型：`FlowEdgeType` 新增，用于检测 `int* ptr = &value` 模式
+- **R5 复杂表达式增强**: v1 正则支持 `std::vector<int>`, `MyClass`, `unsigned long long`, `*ptr = val`, `arr[idx] = val`, `obj.method()`, `ptr->method()`
 - `traceInterprocedural`（v3）新增指针赋值检测扫描：检测 `&var` 模式并创建 `pointer_assign` 边
 - `enteredFuncs` 循环保护 Set：同一 (file, func) 只进入一次，防止递归/互递归无限追踪
 
