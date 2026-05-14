@@ -1,6 +1,6 @@
 # 项目状态仪表盘
 
-> 更新日期: 2026-05-14 | 项目: `opencode-cpp-dfa` | 版本 v0.5.0
+> 更新日期: 2026-05-14 | 项目: `opencode-cpp-dfa` | 版本 v0.5.0 | GitHub: [LKHJFG/opencode-cpp-dfa](https://github.com/LKHJFG/opencode-cpp-dfa)
 
 ---
 
@@ -9,13 +9,13 @@
 | 指标 | 值 | 状态 |
 |------|----|------|
 | **版本** | v0.5.0 | 🟢 |
-| **测试** | 177 pass, **0 fail**, 588 expect, 10 files | 🟢 |
+| **测试** | 196 pass, **0 fail**, 612 expect, 10 files | 🟢 |
 | **构建** | `bun run tsc --noEmit` ✅ / `bun build` ✅ | 🟢 |
 | **WASM** | wasmAvailable=true, resolveWasmPaths() ✅ | 🟢 |
 | **注册工具** | 8 个（含 trace_variable） | 🟢 |
-| **Git** | ✅ **已初始化** — 10 commits on `master` | 🟢 |
-| **远程仓库** | ❌ **网络不通** — `opencode-cpp-dfa` 本地已就绪，待 GitHub 网络通畅时推送 | 🔴 |
-| **CI/CD** | ⏳ **文件就绪** — `.github/workflows/ci.yml` + `release.yml`，待远程推送后自动生效 | 🟡 |
+| **Git** | ✅ **已初始化** — 12 commits on `master` | 🟢 |
+| **远程仓库** | ✅ **已推送** — `github.com/LKHJFG/opencode-cpp-dfa` | 🟢 |
+| **CI/CD** | ✅ **已触发** — `.github/workflows/ci.yml` 在 push 时自动运行 | 🟢 |
 | **未解决问题** | 1 个已知限制（P3 x1） | 🟡 |
 
 ---
@@ -30,10 +30,10 @@
 | **v3/v4 复杂流** | `complex-flow-dfa.test.ts` | 28 | 8 种模式跨文件别名链全部通过 ✅ |
 | **v3 跨函数** | `cross-function-dfa.test.ts` | 27 | 单文件内跨函数追踪 |
 | **v2 AST** | `ast-dfa-integration.test.ts` | 34 | AST DFA 集成 |
-| **v1 行扫描** | `cpp-analysis.test.ts` | 30 | 兜底层 |
+| **v1 行扫描** | `cpp-analysis.test.ts` | 47 | 兜底层（+17 R5 增强） |
 | **插件** | `plugin.test.ts` | 8 | 工具注册 |
 | **其他** | 4 文件 | 23 | 边缘案例等 |
-| **合计** | **10 files** | **177** | **0 fail** |
+| **合计** | **10 files** | **196** | **0 fail** |
 
 ### 复杂流 8 阶段状态
 

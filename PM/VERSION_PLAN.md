@@ -89,22 +89,24 @@
 | WASM 鲁棒性 + 引擎可观测性 + AST 复用 | fallback 路径 + `engineUsed` + 一次解析三层复用 | P2 | ✅ |
 | 复杂表达式解析增强 (R5) | 模板/自定义类型/指针/数组/方法调用 | P2 | ✅ |
 | Git 初始化 + CI/CD 文件就绪 | `git init` + `.github/workflows/` + `.gitattributes` | P2 | ✅ |
+| **远程推送 + CI/CD 打通** | `git push` → GitHub Actions 自动 CI | P1 | ✅ |
 
 ---
 
 ## 下个版本规划
 
-### v0.6.0 — 工程化 & 扩展
-**Phase 4** | 目标: 200+ tests / 0 fail
+### v0.6.0 — 工程健壮性 & 可观测性
+**Phase 4** | 目标: 200+ tests / 0 fail | ✅ CI/CD 已激活
 
 | 工作包 | 说明 | 优先级 |
 |--------|------|--------|
-| **表达式解析遗留** | `&arr[i]`, `*ptr++`, `**ptr` 等残差表达式 | P3 |
-| **性能优化** | 大项目（100+ 文件）分析加速 | P2 |
-| **增量分析** | 仅重分析变更文件 | P2 |
-| **多语言支持** | TypeScript/Go/Rust 的 DFA 管线 | P3 |
-| **报表生成** | HTML/JSON/SARIF 格式 | P3 |
-| **用户文档** | API 文档 + 使用指南 | P3 |
+| **Fallback 集成测试** | v3→v2→v1 降级链路端到端验证 | P1 |
+| **v2↔v1 一致性对标测试** | 同一 C++ 输入对比 AST vs 正则输出差异 | P1 |
+| **基准测试套件** | 量化各引擎耗时，指导策略降级 | P2 |
+| **E2E OpenCode 加载 Smoke** | `.tgz` 构建产物可被 OpenCode 加载验证 | P2 |
+| **`as any` 收敛 + 类型安全审计** | 工具入口及 test mock 的类型逃逸清理 | P3 |
+| **贡献者文档 + HANDFOFF 更新** | onboarding 指南 | P3 |
+| **多语言支持** | TypeScript/Go/Rust 的 DFA 管线 | P3（v0.7.0 待评估） |
 
 ---
 
