@@ -85,6 +85,95 @@ describe("OpenCode Plugin Load Simulation", () => {
       expect(result.metadata?.error).toBeDefined()
     }
   })
+
+  it("should register all static-analysis tools at runtime", async () => {
+    const plugin = pluginModule.default
+    const hooks = await plugin(createMinimalMockContext())
+    const tools = hooks.tool ?? {}
+
+    const expectedTools = [
+      "analyze_file",
+      "list_source_files",
+      "grep_source",
+      "code_stats",
+      "analyze_imports",
+      "find_unused_exports",
+      "analyze_complexity",
+      "trace_variable",
+    ]
+
+    for (const name of expectedTools) {
+      expect(tools[name]).toBeDefined()
+      expect(typeof tools[name].execute).toBe("function")
+    }
+  })
+
+  it("should produce valid output for analyze_complexity tool", async () => {
+    const plugin = pluginModule.default
+    const hooks = await plugin(createMinimalMockContext())
+    const tool = hooks.tool?.analyze_complexity!
+    const result = await tool.execute(
+      { filePath: import.meta.path },
+      createMockToolContext(),
+    )
+
+    expect(result).toBeDefined()
+    if (typeof result !== "string") {
+      expect(result.metadata?.functionCount).toBeGreaterThan(0)
+      expect(result.metadata?.averageComplexity).toBeGreaterThan(0)
+    }
+  })
+
+  it("should handle trace_variable errors gracefully (no crash)", async () => {
+    const plugin = pluginModule.default
+    const hooks = await plugin(createMinimalMockContext())
+    const tool = hooks.tool?.trace_variable!
+    const result = await tool.execute(
+      { filePath: "/nonexistent/test.cpp", variableName: "x" },
+      createMockToolContext(),
+    )
+
+    expect(result).toBeDefined()
+    if (typeof result === "object") {
+      expect(result.output).toContain("Error")
+    }
+  })
+
+  it("should handle concurrent tool calls without interference", async () => {
+    const plugin = pluginModule.default
+    const hooks = await plugin(createMinimalMockContext())
+    const [r1, r2] = await Promise.all([
+      hooks.tool?.analyze_file!.execute(
+        { filePath: import.meta.path },
+        createMockToolContext(),
+      ),
+      hooks.tool?.list_source_files!.execute(
+        { directory: import.meta.dir },
+        createMockToolContext(),
+      ),
+    ])
+
+    expect(r1).toBeDefined()
+    expect(r2).toBeDefined()
+    if (typeof r1 === "object") expect(r1.output).toContain("Total lines:")
+    if (typeof r2 === "object") expect(r2.output).toContain("src")
+  })
+
+  it("should find project files via grep_source tool", async () => {
+    const plugin = pluginModule.default
+    const hooks = await plugin(createMinimalMockContext())
+    const tool = hooks.tool?.grep_source!
+    const result = await tool.execute(
+      { pattern: "import", directory: resolve(import.meta.dir, "..") },
+      createMockToolContext(),
+    )
+
+    expect(result).toBeDefined()
+    if (typeof result === "object") {
+      expect(result.output).toBeDefined()
+      expect(result.output.length).toBeGreaterThan(0)
+    }
+  })
 })
 
 function createMinimalMockContext() {

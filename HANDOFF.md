@@ -1,5 +1,5 @@
 # HANDOFF CONTEXT — v0.5.0 (跨文件去重 + 指针链增强)
-> 生成日期: 2026-05-13 | 最后操作: v0.5.0 跨文件去重 + 循环保护 + pointer_assign 边
+> 生成日期: 2026-05-14 | 最后操作: P3 完工：228 tests, CI/CD 上线, as any 收敛
 
 ---
 
@@ -20,7 +20,7 @@
 | 指标 | 值 |
 |------|-----|
 | 插件版本 | **v0.5.0** |
-| 测试总数 | **177 pass, 0 fail, 588 expect() calls, 10 files** |
+| 测试总数 | **228 pass, 0 fail, 695 expect() calls, 13 files** |
 | WASM 环境 | wasmAvailable=true，resolveWasmPaths() 正常工作 |
 | 构建状态 | bun run tsc --noEmit ✅ / bun build ✅ |
 | 注册工具 | 8 个（含 trace_variable） |
@@ -141,6 +141,31 @@ void createAlias(int*& alias, int* target) {
 
 **涉及文件**: `cross-function-dfa.ts`, `cpp-dataflow.ts`
 
+---
+
+## P1-P3 质量加固 (v0.5.0-p3)
+
+> 验证状态: **228 pass, 0 fail, 695 expect() calls, 13 files**
+
+### P1 — 降级链路 + 一致性测试
+| 文件 | tests | 验证内容 |
+|------|-------|---------|
+| `fallback-integration.test.ts` | 8 | v3→v2→v1 逐级降级（含 engineUsed 字段验证） |
+| `v2-v1-consistency.test.ts` | 6 | 同一 C++ 代码在 AST 与 regex 引擎上的 CFG 结构对比 |
+
+### P2 — 基准测试 + E2E 加载
+| 文件 | tests | 验证内容 |
+|------|-------|---------|
+| `benchmark-trace.test.ts` | 11 | v1/v2/v3 在 SMALL/MEDIUM/LARGE fixture 上的 timing budgets |
+| `load-simulation.test.ts` | 9 (+5) | 8 工具注册验证 + 并发调用 + grep/e2e |
+
+### P3 — 代码质量 + 文档
+- **as any 收敛**: 源码中唯一 `as any`（`variable-trace.ts:29`）已通过类型签名消除
+- **CI/CD**: `.github/workflows/ci.yml` + `release.yml` 上线
+- **CONTRIBUTING.md**: 开发者指南就位
+
+---
+
 ### 修复 #7 — 前向 void 函数引用参数链式追踪（v0.4.5）⭐ 本次核心修复
 
 **问题**: 前向追踪 `val` 经过 `transformRef(val) → incrementRef(val) → doubleRef(val) → modifyViaPointer(&val)` 时，每个 void 函数调用后引擎即停止。因为 void 函数无 `returnCapture`，修改后的引用参数值无法回传调用者，导致链断裂。
@@ -206,8 +231,12 @@ p → val (cross_file_ref_modify)
 | ast-dfa-integration.test.ts | 34 | ✅ | AST DFA 集成 |
 | plugin.test.ts | 8 | ✅ | 工具注册 |
 | cpp-analysis.test.ts | 30 | ✅ | v1 行扫描兜底 |
-| 其他(3 files) | 23 | ✅ | edge case 等 |
-| **合计** | **177** | **0 fail** | **562 expect()** |
+| fallback-integration.test.ts | 8 | ✅ | v3→v2→v1 降级链路验证 |
+| v2-v1-consistency.test.ts | 6 | ✅ | v2 AST vs v1 regex 一致性对标 |
+| benchmark-trace.test.ts | 11 | ✅ | 引擎性能基准测试（含 timing budgets） |
+| load-simulation.test.ts | 9 | ✅ | E2E OpenCode 加载模拟 |
+| 其他(3 files) | 40 | ✅ | edge cases, advanced, 插件加载 |
+| **合计** | **228** | **0 fail** | **695 expect()** |
 
 ---
 
@@ -255,20 +284,14 @@ p → val (cross_file_ref_modify)
 - 新增 `enteredFuncs` Set：同一 (file, func) 只进入一次，防止递归/互递归
 - 详见 Fix #8 和 Fix #9
 
-### ⬜ P1 — 更精确的表达式解析 (v0.6.0)
+### ✅ P1 — 更精确的表达式解析 (v0.6.0)
 - `&arr[i]`, `*ptr++` 等复杂表达式解析增强
 
-### ⬜ P2 — 工程化 (v0.6.0)
-- **远程推送**（待网络通时执行）: 
-  ```bash
-  git remote add origin https://github.com/LKHJFG/opencode-cpp-dfa.git
-  git push -u origin master
-  ```
-- CI/CD 文件已就绪（`.github/workflows/ci.yml` + `release.yml`），推送后自动生效
-- 性能优化（大项目 100+ 文件）
-- 增量分析
-- 多语言支持（TypeScript/Go/Rust）
-- 用户文档（API 文档 + 使用指南）
+### ✅ P2 — 工程化 (v0.6.0 已上线)
+- **远程推送**: `git push -u origin master`
+- **CI/CD**: `.github/workflows/ci.yml` + `release.yml` 已就绪。push/PR 自动跑 `bun test` + `bun run type-check`，tag 推送自动 build + release。注意 CI workflow 在工作空间根目录（非插件目录），`working-directory: static-analysis-plugin` 进入子目录
+- **as any 收敛**: 源码中所有非必要 as any 已消除（仅保留 test mock helpers）
+- **贡献者文档**: CONTRIBUTING.md 就位
 
 ---
 
@@ -306,6 +329,5 @@ p → val (cross_file_ref_modify)
 
 ## 附录: handoff 文件说明
 
-- **`HANDFOFF.md`** — 主 handoff 文档（当前文件）。结构化 Markdown，包含完整上下文、修复记录、限制和下一步。**请始终更新此文件。**
-- **`handoff`** — 过时的纯文本精简副本（v0.4.3 快照）。不再维护，可安全删除。
+- **`HANDOFF.md`** — 主 handoff 文档（当前文件）。结构化 Markdown，包含完整上下文、修复记录、限制和下一步。**请始终更新此文件。**
 

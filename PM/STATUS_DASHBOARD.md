@@ -1,6 +1,6 @@
 # 项目状态仪表盘
 
-> 更新日期: 2026-05-14 | 项目: `opencode-cpp-dfa` | 版本 v0.5.0 | GitHub: [LKHJFG/opencode-cpp-dfa](https://github.com/LKHJFG/opencode-cpp-dfa)
+> 更新日期: 2026-05-14 (修订) | 项目: `opencode-cpp-dfa` | 版本 v0.5.0-p3 | GitHub: [LKHJFG/opencode-cpp-dfa](https://github.com/LKHJFG/opencode-cpp-dfa)
 
 ---
 
@@ -8,15 +8,15 @@
 
 | 指标 | 值 | 状态 |
 |------|----|------|
-| **版本** | v0.5.0 | 🟢 |
-| **测试** | 196 pass, **0 fail**, 612 expect, 10 files | 🟢 |
-| **构建** | `bun run tsc --noEmit` ✅ / `bun build` ✅ | 🟢 |
+| **版本** | v0.5.0-p3 | 🟢 |
+| **测试** | 228 pass, **0 fail**, 695 expect, 13 files | 🟢 |
+| **构建** | `bun run type-check` ✅ / `bun build` ✅ | 🟢 |
 | **WASM** | wasmAvailable=true, resolveWasmPaths() ✅ | 🟢 |
 | **注册工具** | 8 个（含 trace_variable） | 🟢 |
-| **Git** | ✅ **已初始化** — 12 commits on `master` | 🟢 |
-| **远程仓库** | ✅ **已推送** — `github.com/LKHJFG/opencode-cpp-dfa` | 🟢 |
-| **CI/CD** | ✅ **已触发** — `.github/workflows/ci.yml` 在 push 时自动运行 | 🟢 |
-| **未解决问题** | 1 个已知限制（P3 x1） | 🟡 |
+| **Git** | ✅ **已初始化** — 13 files 新增中 | 🟡 |
+| **远程仓库** | ✅ `github.com/LKHJFG/opencode-cpp-dfa` | 🟢 |
+| **CI/CD** | ⚠️ **历史运行失败** — 根因：`bun run tsc --noEmit` 无对应 script，已修正为 `bun run type-check`，需推送后验证 | 🔴 |
+| **未解决问题** | CI 推送后验证 + .github 文件位置确认 | 🟡 |
 
 ---
 

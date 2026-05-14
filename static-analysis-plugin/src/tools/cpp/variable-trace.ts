@@ -17,7 +17,7 @@ import { buildFunctionCFGs, buildCallGraph, traceInterprocedural, type FunctionC
 
 let buildASTCFG: ((tree: any, sourceLines: string[]) => any) | null = null
 
-async function getAstToCfg(): Promise<typeof import("./ast-to-cfg")> {
+async function getAstToCfg(): Promise<{ buildASTCFG: (tree: any, sourceLines: string[]) => any } | null> {
   if (!buildASTCFG) {
     try {
       const mod = await import("./ast-to-cfg")
@@ -26,7 +26,7 @@ async function getAstToCfg(): Promise<typeof import("./ast-to-cfg")> {
       buildASTCFG = null
     }
   }
-  return buildASTCFG as any
+  return buildASTCFG ? { buildASTCFG } : null
 }
 
 export interface VariableTraceArgs {

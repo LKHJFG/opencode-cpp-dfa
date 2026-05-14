@@ -28,7 +28,7 @@ jobs:
 
       - run: bun install
 
-      - run: bun run tsc --noEmit
+      - run: bun run type-check
 
       - run: bun test
 
