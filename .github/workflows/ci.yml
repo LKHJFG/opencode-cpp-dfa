@@ -28,7 +28,18 @@ jobs:
 
       - run: bun install
 
-      - run: bun run tsc --noEmit
+      - name: TS Check
+        run: |
+          bun run tsc --noEmit >tsc-all.txt 2>&1; ec=$?
+          cat tsc-all.txt
+          echo "TSC_EXIT=$ec"
+          exit $ec
+      - name: Upload tsc errors
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsc-errors-v3
+          path: static-analysis-plugin/tsc-all.txt
 
       - name: Run tests
         run: bun test
