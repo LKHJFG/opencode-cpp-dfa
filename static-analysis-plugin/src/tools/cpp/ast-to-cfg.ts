@@ -38,6 +38,22 @@ function findChild(node: any, type: string): any | null {
   return null
 }
 
+function findFieldChild(node: any, fieldName: string): any | null {
+  if (typeof node.childForFieldName === "function") {
+    const child = node.childForFieldName(fieldName)
+    if (child) return child
+  }
+  for (let i = 0; i < node.namedChildCount; i++) {
+    try {
+      const child = node.namedChild(i)
+      if ((child as any).fieldName === fieldName) return child
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
+
 function findChildInTree(node: any, type: string): any | null {
   if (node.type === type) return node
   for (let i = 0; i < node.namedChildCount; i++) {
@@ -354,8 +370,8 @@ export function buildASTCFG(
       if (ifStmt) addStmtToCurrent(ifStmt)
       branchStack.push(ifBlockId)
 
-      const thenBranch = findChild(stmtList, "consequence")
-      const elseBranch = findChild(stmtList, "alternative")
+      const thenBranch = findFieldChild(stmtList, "consequence")
+      const elseBranch = findFieldChild(stmtList, "alternative")
 
       if (thenBranch && thenBranch.type === "compound_statement") {
         finalizeCurrent(condLine)

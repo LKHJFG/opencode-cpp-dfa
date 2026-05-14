@@ -1,6 +1,6 @@
 # 项目状态仪表盘
 
-> 更新日期: 2026-05-14 (修订) | 项目: `opencode-cpp-dfa` | 版本 v0.5.0-p3 | GitHub: [LKHJFG/opencode-cpp-dfa](https://github.com/LKHJFG/opencode-cpp-dfa)
+> 更新日期: 2026-05-14 (CI 🟢) | 项目: `opencode-cpp-dfa` | 版本 v0.5.0-p3 | GitHub: [LKHJFG/opencode-cpp-dfa](https://github.com/LKHJFG/opencode-cpp-dfa)
 
 ---
 
@@ -15,8 +15,7 @@
 | **注册工具** | 8 个（含 trace_variable） | 🟢 |
 | **Git** | ✅ **已初始化** — 13 files 新增中 | 🟡 |
 | **远程仓库** | ✅ `github.com/LKHJFG/opencode-cpp-dfa` | 🟢 |
-| **CI/CD** | ⚠️ **历史运行失败** — 根因：`bun run tsc --noEmit` 无对应 script，已修正为 `bun run type-check`，需推送后验证 | 🔴 |
-| **未解决问题** | CI 推送后验证 + .github 文件位置确认 | 🟡 |
+| **CI/CD** | ✅ **Run #18 全部通过** — 详见 `PM/knowledge-base/CI_TROUBLESHOOTING.md` | 🟢 |
 
 ---
 

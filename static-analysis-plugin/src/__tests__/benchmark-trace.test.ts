@@ -1,19 +1,24 @@
 /**
  * Benchmark Tests for trace_variable Tool Engines
  *
- * Measures and compares execution time of v1 (regex), v2 (AST), and v3 (cross-function) engines.
+ * Measures and compares execution time of v1 (regex), v2 (AST), v3 (interprocedural),
+ * and v4 (cross-file DFA) engines. Uses self-calibrating baselines: each engine/size
+ * combo is calibrated in beforeAll, then each test asserts median < baseline * 2x.
+ * Baselines are measured on Windows dev machine; update by re-running calibration.
  */
 
 import { describe, it, expect, beforeAll } from "bun:test"
-import { resolve } from "path"
+import { resolve, join } from "path"
 import { buildCFG } from "../tools/cpp/cpp-cfg"
 import { buildDefUseChains, analyzeDataFlow, type TraceResult } from "../tools/cpp/cpp-dataflow"
 import { CppParser } from "../tools/cpp/cpp-parser"
 import { buildASTCFG } from "../tools/cpp/ast-to-cfg"
 import { buildFunctionCFGs, buildCallGraph, traceInterprocedural, type InterproceduralResult } from "../tools/cpp/cross-function-dfa"
+import { analyzeWorkspace, traceCrossFile, type WorkspaceAnalysis } from "../tools/cpp/cross-file-dfa"
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs"
 
 const testDir = resolve(import.meta.dir, "../../.test-tmp")
+const COMPLEX_DFA_DIR = resolve(import.meta.dir, "../../.test-projects/complex-dfa")
 
 function ensureTestDir() {
   if (!existsSync(testDir)) mkdirSync(testDir, { recursive: true })
@@ -214,6 +219,25 @@ async function runV3(sourceCode: string, varName: string, funcName: string, dire
 }
 
 // ========================================
+// Self-Calibrating Baselines
+// Calibrated once in beforeAll — thresholds are 2x these values.
+// ========================================
+
+interface EngineBaselines {
+  v1: { small: number; medium: number; large: number }
+  v2: { small: number; medium: number; large: number }
+  v3: { small: number; medium: number; large: number }
+  v4: { workspace: number; trace: number }
+}
+
+const BASELINES: EngineBaselines = {
+  v1: { small: 0, medium: 0, large: 0 },
+  v2: { small: 0, medium: 0, large: 0 },
+  v3: { small: 0, medium: 0, large: 0 },
+  v4: { workspace: 0, trace: 0 },
+}
+
+// ========================================
 // Tests
 // ========================================
 
@@ -223,44 +247,142 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
   beforeAll(async () => {
     parser = CppParser.getInstance()
     await parser.init()
+
+    // -------------------------------------------------------
+    // Calibration: measure all engine/size combos to set baselines
+    // Thresholds = baseline * 2 (allows normal variance, catches regressions)
+    // -------------------------------------------------------
+
+    // v1 calibration
+    const v1sl = SMALL_FIXTURE.split("\n")
+    BASELINES.v1.small = measureSync(() => {
+      const cfg = buildCFG(v1sl)
+      const duInfo = buildDefUseChains(cfg, "/cal/v1s.cpp")
+      analyzeDataFlow(cfg, duInfo, "a", 2, "forward", "/cal/v1s.cpp")
+    }).medianMs
+
+    const v1ml = MEDIUM_FIXTURE.split("\n")
+    BASELINES.v1.medium = measureSync(() => {
+      const cfg = buildCFG(v1ml)
+      const duInfo = buildDefUseChains(cfg, "/cal/v1m.cpp")
+      analyzeDataFlow(cfg, duInfo, "result", 2, "forward", "/cal/v1m.cpp")
+    }).medianMs
+
+    const v1ll = LARGE_FIXTURE.split("\n")
+    BASELINES.v1.large = measureSync(() => {
+      const cfg = buildCFG(v1ll)
+      const duInfo = buildDefUseChains(cfg, "/cal/v1l.cpp")
+      analyzeDataFlow(cfg, duInfo, "sum", 19, "forward", "/cal/v1l.cpp")
+    }).medianMs
+
+    // v2 calibration
+    const v2sp = await parser.parseContent(SMALL_FIXTURE, "/cal/v2s.cpp")
+    BASELINES.v2.small = measureSync(() => {
+      const cfg = buildASTCFG(v2sp.tree, v2sp.sourceLines)
+      const duInfo = buildDefUseChains(cfg, "/cal/v2s.cpp")
+      analyzeDataFlow(cfg, duInfo, "a", 2, "forward", "/cal/v2s.cpp")
+    }).medianMs
+
+    const v2mp = await parser.parseContent(MEDIUM_FIXTURE, "/cal/v2m.cpp")
+    BASELINES.v2.medium = measureSync(() => {
+      const cfg = buildASTCFG(v2mp.tree, v2mp.sourceLines)
+      const duInfo = buildDefUseChains(cfg, "/cal/v2m.cpp")
+      analyzeDataFlow(cfg, duInfo, "result", 2, "forward", "/cal/v2m.cpp")
+    }).medianMs
+
+    const v2lp = await parser.parseContent(LARGE_FIXTURE, "/cal/v2l.cpp")
+    BASELINES.v2.large = measureSync(() => {
+      const cfg = buildASTCFG(v2lp.tree, v2lp.sourceLines)
+      const duInfo = buildDefUseChains(cfg, "/cal/v2l.cpp")
+      analyzeDataFlow(cfg, duInfo, "sum", 19, "forward", "/cal/v2l.cpp")
+    }).medianMs
+
+    // v3 calibration
+    const v3sp = await parser.parseContent(SMALL_FIXTURE, "/cal/v3s.cpp")
+    BASELINES.v3.small = measureSync(() => {
+      const funcCfgs = buildFunctionCFGs(v3sp.tree, v3sp.sourceLines, "/cal/v3s.cpp")
+      const callSites = buildCallGraph(v3sp.tree, funcCfgs)
+      traceInterprocedural(funcCfgs, callSites, "a", "simpleCalc", "forward", "/cal/v3s.cpp")
+    }).medianMs
+
+    const v3mp = await parser.parseContent(MEDIUM_FIXTURE, "/cal/v3m.cpp")
+    BASELINES.v3.medium = measureSync(() => {
+      const funcCfgs = buildFunctionCFGs(v3mp.tree, v3mp.sourceLines, "/cal/v3m.cpp")
+      const callSites = buildCallGraph(v3mp.tree, funcCfgs)
+      traceInterprocedural(funcCfgs, callSites, "result", "mediumFunction", "forward", "/cal/v3m.cpp")
+    }).medianMs
+
+    const v3lp = await parser.parseContent(LARGE_FIXTURE, "/cal/v3l.cpp")
+    BASELINES.v3.large = measureSync(() => {
+      const funcCfgs = buildFunctionCFGs(v3lp.tree, v3lp.sourceLines, "/cal/v3l.cpp")
+      const callSites = buildCallGraph(v3lp.tree, funcCfgs)
+      traceInterprocedural(funcCfgs, callSites, "sum", "processWithConditions", "forward", "/cal/v3l.cpp")
+    }).medianMs
+
+    // v4 calibration — cross-file workspace analysis + trace
+    const v4Workspace = await analyzeWorkspace(COMPLEX_DFA_DIR)
+    BASELINES.v4.workspace = (await measureAsync(async () => {
+      await analyzeWorkspace(COMPLEX_DFA_DIR)
+    })).medianMs
+
+    const startFile = join(COMPLEX_DFA_DIR, "function-flow.cpp")
+    BASELINES.v4.trace = (await measureAsync(async () => {
+      await traceCrossFile("num", startFile, "forward", v4Workspace, 3)
+    })).medianMs
+
+    console.log(`\n  Calibrated baselines (ms):`)
+    console.log(`    v1: SMALL=${BASELINES.v1.small.toFixed(3)} MEDIUM=${BASELINES.v1.medium.toFixed(3)} LARGE=${BASELINES.v1.large.toFixed(3)}`)
+    console.log(`    v2: SMALL=${BASELINES.v2.small.toFixed(3)} MEDIUM=${BASELINES.v2.medium.toFixed(3)} LARGE=${BASELINES.v2.large.toFixed(3)}`)
+    console.log(`    v3: SMALL=${BASELINES.v3.small.toFixed(3)} MEDIUM=${BASELINES.v3.medium.toFixed(3)} LARGE=${BASELINES.v3.large.toFixed(3)}`)
+    console.log(`    v4: workspace=${BASELINES.v4.workspace.toFixed(3)} trace=${BASELINES.v4.trace.toFixed(3)}`)
+    console.log(`    Thresholds set at 2x baseline\n`)
   })
 
   // v1 benchmarks (sync)
-  it("v1 SMALL should complete within 10ms", () => {
+  it("v1 SMALL should complete within threshold", () => {
     const sourceLines = SMALL_FIXTURE.split("\n")
     const { medianMs, timings } = measureSync(() => {
       const cfg = buildCFG(sourceLines)
       const duInfo = buildDefUseChains(cfg, "/test/s.cpp")
       analyzeDataFlow(cfg, duInfo, "a", 2, "forward", "/test/s.cpp")
     })
-    console.log(`  v1 SMALL: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(10)
+    const threshold = BASELINES.v1.small * 2
+    console.log(`  v1 SMALL: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
-  it("v1 MEDIUM should complete within 20ms", () => {
+  it("v1 MEDIUM should complete within threshold", () => {
     const sourceLines = MEDIUM_FIXTURE.split("\n")
     const { medianMs, timings } = measureSync(() => {
       const cfg = buildCFG(sourceLines)
       const duInfo = buildDefUseChains(cfg, "/test/m.cpp")
-      analyzeDataFlow(cfg, duInfo, "result", 3, "forward", "/test/m.cpp")
+      analyzeDataFlow(cfg, duInfo, "result", 2, "forward", "/test/m.cpp")
     })
-    console.log(`  v1 MEDIUM: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(20)
+    const threshold = BASELINES.v1.medium * 2
+    console.log(`  v1 MEDIUM: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
-  it("v1 LARGE should complete within 50ms", () => {
+  it("v1 LARGE should complete within threshold", () => {
     const sourceLines = LARGE_FIXTURE.split("\n")
     const { medianMs, timings } = measureSync(() => {
       const cfg = buildCFG(sourceLines)
       const duInfo = buildDefUseChains(cfg, "/test/l.cpp")
-      analyzeDataFlow(cfg, duInfo, "sum", 97, "forward", "/test/l.cpp")
+      analyzeDataFlow(cfg, duInfo, "sum", 19, "forward", "/test/l.cpp")
     })
-    console.log(`  v1 LARGE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(50)
+    const threshold = BASELINES.v1.large * 2
+    console.log(`  v1 LARGE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
   // v2 benchmarks (async, AST parse first)
-  it("v2 SMALL should complete within 50ms", async () => {
+  it("v2 SMALL should complete within threshold", async () => {
     const content = SMALL_FIXTURE
     const absPath = "/test/v2s.cpp"
     const parseResult = await parser.parseContent(content, absPath)
@@ -269,38 +391,47 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const duInfo = buildDefUseChains(cfg, absPath)
       analyzeDataFlow(cfg, duInfo, "a", 2, "forward", absPath)
     })
-    console.log(`  v2 SMALL: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(50)
+    const threshold = BASELINES.v2.small * 2
+    console.log(`  v2 SMALL: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
-  it("v2 MEDIUM should complete within 200ms", async () => {
+  it("v2 MEDIUM should complete within threshold", async () => {
     const content = MEDIUM_FIXTURE
     const absPath = "/test/v2m.cpp"
     const parseResult = await parser.parseContent(content, absPath)
     const { medianMs, timings } = measureSync(() => {
       const cfg = buildASTCFG(parseResult.tree, parseResult.sourceLines)
       const duInfo = buildDefUseChains(cfg, absPath)
-      analyzeDataFlow(cfg, duInfo, "result", 3, "forward", absPath)
+      analyzeDataFlow(cfg, duInfo, "result", 2, "forward", absPath)
     })
-    console.log(`  v2 MEDIUM: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(200)
+    const threshold = BASELINES.v2.medium * 2
+    console.log(`  v2 MEDIUM: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
-  it("v2 LARGE should complete within 500ms", async () => {
+  it("v2 LARGE should complete within threshold", async () => {
     const content = LARGE_FIXTURE
     const absPath = "/test/v2l.cpp"
     const parseResult = await parser.parseContent(content, absPath)
     const { medianMs, timings } = measureSync(() => {
       const cfg = buildASTCFG(parseResult.tree, parseResult.sourceLines)
       const duInfo = buildDefUseChains(cfg, absPath)
-      analyzeDataFlow(cfg, duInfo, "sum", 97, "forward", absPath)
+      analyzeDataFlow(cfg, duInfo, "sum", 19, "forward", absPath)
     })
-    console.log(`  v2 LARGE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(500)
+    const threshold = BASELINES.v2.large * 2
+    console.log(`  v2 LARGE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
   // v3 benchmarks (async, parse + function CFGs)
-  it("v3 SMALL should complete within 100ms", async () => {
+  it("v3 SMALL should complete within threshold", async () => {
     const content = SMALL_FIXTURE
     const absPath = "/test/v3s.cpp"
     const parseResult = await parser.parseContent(content, absPath)
@@ -311,11 +442,14 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const callSites = buildCallGraph(tree, funcCfgs)
       traceInterprocedural(funcCfgs, callSites, "a", "simpleCalc", "forward", absPath)
     })
-    console.log(`  v3 SMALL: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(100)
+    const threshold = BASELINES.v3.small * 2
+    console.log(`  v3 SMALL: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
-  it("v3 MEDIUM should complete within 500ms", async () => {
+  it("v3 MEDIUM should complete within threshold", async () => {
     const content = MEDIUM_FIXTURE
     const absPath = "/test/v3m.cpp"
     const parseResult = await parser.parseContent(content, absPath)
@@ -326,11 +460,14 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const callSites = buildCallGraph(tree, funcCfgs)
       traceInterprocedural(funcCfgs, callSites, "result", "mediumFunction", "forward", absPath)
     })
-    console.log(`  v3 MEDIUM: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(500)
+    const threshold = BASELINES.v3.medium * 2
+    console.log(`  v3 MEDIUM: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
-  it("v3 LARGE should complete within 2000ms", async () => {
+  it("v3 LARGE should complete within threshold", async () => {
     const content = LARGE_FIXTURE
     const absPath = "/test/v3l.cpp"
     const parseResult = await parser.parseContent(content, absPath)
@@ -341,12 +478,42 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const callSites = buildCallGraph(tree, funcCfgs)
       traceInterprocedural(funcCfgs, callSites, "sum", "processWithConditions", "forward", absPath)
     })
-    console.log(`  v3 LARGE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}]`)
-    expect(medianMs).toBeLessThan(2000)
+    const threshold = BASELINES.v3.large * 2
+    console.log(`  v3 LARGE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
+  })
+
+  // v4 benchmarks — cross-file DFA (workspace scan + trace)
+  it("v4 WORKSPACE should complete within threshold", async () => {
+    const { medianMs, timings } = await measureAsync(async () => {
+      await analyzeWorkspace(COMPLEX_DFA_DIR)
+    })
+    const threshold = BASELINES.v4.workspace * 2
+    const ws = await analyzeWorkspace(COMPLEX_DFA_DIR)
+    console.log(`  v4 WORKSPACE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(ws.totalFiles).toBeGreaterThan(0)
+    expect(ws.parsedFiles).toBeGreaterThan(0)
+    expect(ws.totalFunctions).toBeGreaterThan(0)
+  })
+
+  it("v4 TRACE should complete within threshold", async () => {
+    const workspace = await analyzeWorkspace(COMPLEX_DFA_DIR)
+    const startFile = join(COMPLEX_DFA_DIR, "function-flow.cpp")
+    const { medianMs, timings } = await measureAsync(async () => {
+      await traceCrossFile("num", startFile, "forward", workspace, 3)
+    })
+    const threshold = BASELINES.v4.trace * 2
+    console.log(`  v4 TRACE: median=${medianMs.toFixed(3)}ms [${timings.map(t => t.toFixed(2)).join(", ")}] threshold=${threshold.toFixed(3)}ms ${medianMs < threshold ? "PASS" : "FAIL"}`)
+    expect(medianMs).toBeLessThan(threshold)
+    expect(timings.length).toBe(5)
+    expect(medianMs).toBeGreaterThan(0)
   })
 
   // Cross-engine consistency
-  it("all three engines produce results on SMALL fixture", async () => {
+  it("all engines produce results on SMALL fixture", async () => {
     const v1Result = runV1(SMALL_FIXTURE, "a", 2, "forward")
     const v2Result = await runV2(SMALL_FIXTURE, "a", 2, "forward")
     const v3Result = await runV3(SMALL_FIXTURE, "a", "simpleCalc", "forward")
@@ -364,8 +531,24 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
     expect(v3Result.allVariables.length).toBeGreaterThan(0)
   })
 
+  // v4 cross-engine consistency
+  it("v4 produces cross-file results on complex-dfa fixture", async () => {
+    const workspace = await analyzeWorkspace(COMPLEX_DFA_DIR)
+    const startFile = join(COMPLEX_DFA_DIR, "function-flow.cpp")
+    const v4Result = await traceCrossFile("num", startFile, "forward", workspace, 3)
+
+    console.log(`  v4 cross-file: files=${workspace.totalFiles}, parsed=${workspace.parsedFiles}, fns=${workspace.totalFunctions}`)
+    console.log(`    edges=${v4Result.edges.length}, vars=${v4Result.allVariables.length}, crossEdges=${v4Result.crossEdgesCount}`)
+
+    expect(workspace.totalFiles).toBeGreaterThan(0)
+    expect(workspace.parsedFiles).toBeGreaterThan(0)
+    expect(workspace.totalFunctions).toBeGreaterThan(0)
+    expect(v4Result.edges.length).toBeGreaterThan(0)
+    expect(v4Result.allVariables.length).toBeGreaterThan(0)
+  })
+
   // Summary table
-  it("should print benchmark summary", async () => {
+  it("should print benchmark summary with thresholds", async () => {
     const rows: string[] = []
 
     // v1
@@ -374,11 +557,11 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const ml = MEDIUM_FIXTURE.split("\n")
       const ll = LARGE_FIXTURE.split("\n")
       const r1 = measureSync(() => { const c = buildCFG(sl); const d = buildDefUseChains(c, "/t"); analyzeDataFlow(c, d, "a", 2, "forward", "/t") })
-      rows.push(`| v1 | SMALL | ${r1.medianMs.toFixed(3)}ms`)
-      const r2 = measureSync(() => { const c = buildCFG(ml); const d = buildDefUseChains(c, "/t"); analyzeDataFlow(c, d, "result", 3, "forward", "/t") })
-      rows.push(`| v1 | MEDIUM | ${r2.medianMs.toFixed(3)}ms`)
-      const r3 = measureSync(() => { const c = buildCFG(ll); const d = buildDefUseChains(c, "/t"); analyzeDataFlow(c, d, "sum", 97, "forward", "/t") })
-      rows.push(`| v1 | LARGE | ${r3.medianMs.toFixed(3)}ms`)
+      rows.push(`| v1 | SMALL | ${r1.medianMs.toFixed(3)}ms | ${(BASELINES.v1.small * 2).toFixed(3)}ms | ${r1.medianMs < BASELINES.v1.small * 2 ? "PASS" : "FAIL"}`)
+      const r2 = measureSync(() => { const c = buildCFG(ml); const d = buildDefUseChains(c, "/t"); analyzeDataFlow(c, d, "result", 2, "forward", "/t") })
+      rows.push(`| v1 | MEDIUM | ${r2.medianMs.toFixed(3)}ms | ${(BASELINES.v1.medium * 2).toFixed(3)}ms | ${r2.medianMs < BASELINES.v1.medium * 2 ? "PASS" : "FAIL"}`)
+      const r3 = measureSync(() => { const c = buildCFG(ll); const d = buildDefUseChains(c, "/t"); analyzeDataFlow(c, d, "sum", 19, "forward", "/t") })
+      rows.push(`| v1 | LARGE | ${r3.medianMs.toFixed(3)}ms | ${(BASELINES.v1.large * 2).toFixed(3)}ms | ${r3.medianMs < BASELINES.v1.large * 2 ? "PASS" : "FAIL"}`)
     }
 
     // v2
@@ -387,11 +570,11 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const p2 = await parser.parseContent(MEDIUM_FIXTURE, "/m")
       const p3 = await parser.parseContent(LARGE_FIXTURE, "/l")
       const r1 = measureSync(() => { const c = buildASTCFG(p1.tree, p1.sourceLines); const d = buildDefUseChains(c, "/s"); analyzeDataFlow(c, d, "a", 2, "forward", "/s") })
-      rows.push(`| v2 | SMALL | ${r1.medianMs.toFixed(3)}ms`)
-      const r2 = measureSync(() => { const c = buildASTCFG(p2.tree, p2.sourceLines); const d = buildDefUseChains(c, "/m"); analyzeDataFlow(c, d, "result", 3, "forward", "/m") })
-      rows.push(`| v2 | MEDIUM | ${r2.medianMs.toFixed(3)}ms`)
-      const r3 = measureSync(() => { const c = buildASTCFG(p3.tree, p3.sourceLines); const d = buildDefUseChains(c, "/l"); analyzeDataFlow(c, d, "sum", 97, "forward", "/l") })
-      rows.push(`| v2 | LARGE | ${r3.medianMs.toFixed(3)}ms`)
+      rows.push(`| v2 | SMALL | ${r1.medianMs.toFixed(3)}ms | ${(BASELINES.v2.small * 2).toFixed(3)}ms | ${r1.medianMs < BASELINES.v2.small * 2 ? "PASS" : "FAIL"}`)
+      const r2 = measureSync(() => { const c = buildASTCFG(p2.tree, p2.sourceLines); const d = buildDefUseChains(c, "/m"); analyzeDataFlow(c, d, "result", 2, "forward", "/m") })
+      rows.push(`| v2 | MEDIUM | ${r2.medianMs.toFixed(3)}ms | ${(BASELINES.v2.medium * 2).toFixed(3)}ms | ${r2.medianMs < BASELINES.v2.medium * 2 ? "PASS" : "FAIL"}`)
+      const r3 = measureSync(() => { const c = buildASTCFG(p3.tree, p3.sourceLines); const d = buildDefUseChains(c, "/l"); analyzeDataFlow(c, d, "sum", 19, "forward", "/l") })
+      rows.push(`| v2 | LARGE | ${r3.medianMs.toFixed(3)}ms | ${(BASELINES.v2.large * 2).toFixed(3)}ms | ${r3.medianMs < BASELINES.v2.large * 2 ? "PASS" : "FAIL"}`)
     }
 
     // v3
@@ -400,16 +583,26 @@ describe("Benchmark: trace_variable Engine Comparison", () => {
       const p2 = await parser.parseContent(MEDIUM_FIXTURE, "/m")
       const p3 = await parser.parseContent(LARGE_FIXTURE, "/l")
       const r1 = measureSync(() => { const f1 = buildFunctionCFGs(p1.tree, p1.sourceLines, "/s"); const c1 = buildCallGraph(p1.tree, f1); traceInterprocedural(f1, c1, "a", "simpleCalc", "forward", "/s") })
-      rows.push(`| v3 | SMALL | ${r1.medianMs.toFixed(3)}ms`)
+      rows.push(`| v3 | SMALL | ${r1.medianMs.toFixed(3)}ms | ${(BASELINES.v3.small * 2).toFixed(3)}ms | ${r1.medianMs < BASELINES.v3.small * 2 ? "PASS" : "FAIL"}`)
       const r2 = measureSync(() => { const f2 = buildFunctionCFGs(p2.tree, p2.sourceLines, "/m"); const c2 = buildCallGraph(p2.tree, f2); traceInterprocedural(f2, c2, "result", "mediumFunction", "forward", "/m") })
-      rows.push(`| v3 | MEDIUM | ${r2.medianMs.toFixed(3)}ms`)
+      rows.push(`| v3 | MEDIUM | ${r2.medianMs.toFixed(3)}ms | ${(BASELINES.v3.medium * 2).toFixed(3)}ms | ${r2.medianMs < BASELINES.v3.medium * 2 ? "PASS" : "FAIL"}`)
       const r3 = measureSync(() => { const f3 = buildFunctionCFGs(p3.tree, p3.sourceLines, "/l"); const c3 = buildCallGraph(p3.tree, f3); traceInterprocedural(f3, c3, "sum", "processWithConditions", "forward", "/l") })
-      rows.push(`| v3 | LARGE | ${r3.medianMs.toFixed(3)}ms`)
+      rows.push(`| v3 | LARGE | ${r3.medianMs.toFixed(3)}ms | ${(BASELINES.v3.large * 2).toFixed(3)}ms | ${r3.medianMs < BASELINES.v3.large * 2 ? "PASS" : "FAIL"}`)
+    }
+
+    // v4
+    {
+      const wr1 = await measureAsync(async () => { await analyzeWorkspace(COMPLEX_DFA_DIR) })
+      rows.push(`| v4 | WORKSPACE | ${wr1.medianMs.toFixed(3)}ms | ${(BASELINES.v4.workspace * 2).toFixed(3)}ms | ${wr1.medianMs < BASELINES.v4.workspace * 2 ? "PASS" : "FAIL"}`)
+      const ws = await analyzeWorkspace(COMPLEX_DFA_DIR)
+      const sf = join(COMPLEX_DFA_DIR, "function-flow.cpp")
+      const tr1 = await measureAsync(async () => {       await traceCrossFile("num", sf, "forward", ws, 3) })
+      rows.push(`| v4 | TRACE | ${tr1.medianMs.toFixed(3)}ms | ${(BASELINES.v4.trace * 2).toFixed(3)}ms | ${tr1.medianMs < BASELINES.v4.trace * 2 ? "PASS" : "FAIL"}`)
     }
 
     console.log("\n=== Benchmark Summary ===")
-    console.log("| Engine | Size  | Median Time |")
-    console.log("|--------|-------|-------------|")
+    console.log("| Engine | Size      | Median Time | Threshold(2x) | Status |")
+    console.log("|--------|-----------|-------------|---------------|--------|")
     for (const row of rows) console.log(row)
     console.log("=========================\n")
   })

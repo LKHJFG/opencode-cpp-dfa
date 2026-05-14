@@ -5,6 +5,19 @@
 
 ---
 
+## [v0.5.1] — 2026-05-14 (CI 🟢)
+
+### CI/CD
+- **CI 全面通过** (`924dedf`): 经历 17 次失败后全部 🟢 — 排故全记录见 `PM/knowledge-base/CI_TROUBLESHOOTING.md`
+- **修复 4 类根因**: `@types/node` 缺失、`@types/bun` 缺失、build/test 顺序错误、平台依赖 Map 遍历顺序
+- **文档化**：新增 `PM/knowledge-base/CI_TROUBLESHOOTING.md` CI 排故知识库
+
+### Infrastructure
+- **清理**: 移除 CI 调试 artifacts（artifact.zip, run*.json 等）
+- **状态仪表盘更新**: CI/CD 🔴→🟢
+
+---
+
 ## [v0.5.0] — 2026-05-14
 
 ### Infrastructure

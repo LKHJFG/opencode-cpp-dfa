@@ -269,6 +269,45 @@ describe("v2↔v1 consistency", () => {
 })
 
 // ============================================================
+// KNOWN DIFFERENCES (resolved vs remaining)
+// ============================================================
+//
+// RESOLVED (4 scenarios, v1 engine fixes):
+//   Tests 1-4: v1 counted function signature `int main() {` as a
+//     `function_call` statement via FUNC_CALL_PATTERN. Fix: skip
+//     parseLine for multi-line function definitions in buildCFG.
+//     Root cause: regex line-scan treats "main()" inside function
+//     header as a call expression.
+//   Test 4 also required DECL_PATTERN to handle array declarators
+//     (`int arr[10]`) and a (?!\w) guard on the user-type alternation
+//     to stop false matches on `arr[0] = 42`.
+//
+// REMAINING (structural / scope differences):
+//
+//   Test 5 — function scoping:
+//     "block 0 (entry): v1=1 vs v2=4"
+//     "block 1 (cont(L4)): v1=5 vs v2=0"
+//     Root cause: v1 is line-based and processes ALL functions
+//     sequentially with no way to scope to a specific function.
+//     v2 uses tree-sitter AST to locate the exact function_definition.
+//     Fixing this would require v1 to pre-scan for function boundaries,
+//     which is beyond regex-scan's design.
+//     Correct engine: v2 (scope-aware).
+//
+//   Test 6 — block ID alignment:
+//     "block 1 (if(L4)): v1=2 vs v2=0"
+//     "block 2 (else(L6)): v1=assignment vs v2=if"
+//     "block 3 (cont(L9)): v1=return vs v2=assignment"
+//     Root cause: v2 initialises with entry(0)+exit(1) blocks, so
+//     all subsequent IDs are shifted by 1. v1 has no exit block.
+//     Additionally v2 creates separate then/else sub-blocks while
+//     v1 keeps if-body in the if-block (then part) and creates an
+//     else-block after } else { is recognised (v1 fix added).
+//     The comparison matches by block ID, so semantically different
+//     blocks get compared (v1 if → v2 exit; v1 else → v2 if; etc.)
+//     Correct engine: v2 (finer granularity).
+//
+// ============================================================
 // Fallback tests when WASM is not available
 // ============================================================
 

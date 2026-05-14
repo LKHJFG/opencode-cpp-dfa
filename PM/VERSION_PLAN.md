@@ -13,7 +13,7 @@
 | **v0.3.0** | Phase 3 起点 (DFA) | ✅ 完成 | C++ DFA v3 跨函数、三层管线、125 tests |
 | **v0.4.x** | Phase 3 深入 (Cross-File) | ✅ **已完成** | 跨文件引擎、别名链追踪、void 函数参前向追踪、**177 tests / 0 fail** |
 | **v0.5.0** | Phase 3 完成 | ✅ **已完成** | 跨文件前向链去重、指针链增强、循环保护 |
-| **v0.6.0** | Phase 4 (Polish) | ⬜ **下一个** | 性能优化、多语言、报表生成、CI/CD 集成 |
+| **v0.6.0** | Phase 4 (Polish) | 🔄 **进行中** | 276+ tests, 测试堡垒(边界/变异/性能门禁/降级E2E), CI/CD 🟢, AI协同增强 |
 
 ---
 
@@ -95,18 +95,60 @@
 
 ## 下个版本规划
 
-### v0.6.0 — 工程健壮性 & 可观测性
-**Phase 4** | 目标: 200+ tests / 0 fail | ✅ CI/CD 已激活
+### v0.6.0 — 质量堡垒 + AI 协同
+**Phase 4** | 里程碑: 276 tests / 0 fail / 867 expect | ✅ CI/CD 🟢
 
-| 工作包 | 说明 | 优先级 |
-|--------|------|--------|
-| **Fallback 集成测试** | v3→v2→v1 降级链路端到端验证 | P1 |
-| **v2↔v1 一致性对标测试** | 同一 C++ 输入对比 AST vs 正则输出差异 | P1 |
-| **基准测试套件** | 量化各引擎耗时，指导策略降级 | P2 |
-| **E2E OpenCode 加载 Smoke** | `.tgz` 构建产物可被 OpenCode 加载验证 | P2 |
-| **`as any` 收敛 + 类型安全审计** | 工具入口及 test mock 的类型逃逸清理 | P3 |
-| **贡献者文档 + HANDFOFF 更新** | onboarding 指南 | P3 |
-| **多语言支持** | TypeScript/Go/Rust 的 DFA 管线 | P3（v0.7.0 待评估） |
+| 工作包 | 优先级 | 状态 |
+|--------|--------|------|
+| **WP1-4: 测试堡垒** (边界/变异/性能门禁/降级E2E/v2↔v1) | P1 | ✅ |
+| **P8-E: Tool Description 优化 — AI 决策智能** | P2 | ⬜ |
+| **P8-F: Tool Chaining — 工具组合编排** | P2 | ⬜ |
+| **P8-G: OpenCode Hooks 深度集成** | P2 | ⬜ |
+| **P8-H: AI 反馈增强 — 置信度 + 建议** | P2 | ⬜ |
+| **版本治理 + 发布管线** | P3 | ⬜ |
+| **`as any` 收敛 + 类型安全** | P3 | ⬜ |
+
+#### P8-E: Tool Description 优化 — AI 决策智能
+**目标**: 让 AI Agent 更聪明地选择调用哪个工具、传什么参数。
+
+| 子任务 | 说明 |
+|--------|------|
+| E1 | 审计所有 8 个工具的 description 字段，补充调用场景和示例 |
+| E2 | 为 `trace_variable` 的 direction/line/maxDepth 参数添加 AI 友好的描述（何时传什么值） |
+| E3 | 为 `analyze_file`/`grep_source` 等基础工具补充组合场景描述（"可搭配 trace_variable 做深入分析"） |
+| E4 | 添加工具输出的 AI 消费指南 — structured metadata 字段说明 |
+
+#### P8-F: Tool Chaining — 工具组合编排
+**目标**: 设计工具输出格式天然可串联，AI 能轻松将多个工具组合成分析管线。
+
+| 子任务 | 说明 |
+|--------|------|
+| F1 | 定义统一输出接口规范: `{ output, metadata: { suggestions, chainable, confidence, next_steps } }` |
+| F2 | `trace_variable` 输出增加 `suggestions` 字段（如检测到跨文件变量→建议用 directory 参数重试） |
+| F3 | `analyze_imports` + `find_unused_exports` 输出互引，AI 可串联分析依赖链 |
+| F4 | 设计"分析报告"聚合工具：调用多个基础工具 + 整合结果为一篇报告 |
+
+#### P8-G: OpenCode Hooks 深度集成
+**目标**: 利用 SDK 中未使用的 10+ hooks，将分析能力嵌入 AI 工作流。
+
+| 子任务 | 说明 |
+|--------|------|
+| G1 | `tool.execute.after` — 工具执行后自动注入分析建议到结果 |
+| G2 | `tool.execute.before` — 根据上下文自动补充工具参数（如自动检测 directory） |
+| G3 | `chat.message` — 拦截消息检测"变量追踪"意图，预热 WASM 解析器 |
+| G4 | `chat.params` — 分析任务时调高 temperature 鼓励创造性推理 |
+| G5 | `permission.ask` — 分析操作自动放行（白名单文件模式） |
+| G6 | `command.execute.before` — 编译命令前自动注入环境分析上下文 |
+
+#### P8-H: AI 反馈增强 — 置信度 + 建议下一步
+**目标**: 帮助 AI 判断分析结果的可靠性，决定是否信任/降级/重试。
+
+| 子任务 | 说明 |
+|--------|------|
+| H1 | 所有分析工具返回 `confidence` 字段（0-1）：v4 跨文件 > v3 跨函数 > v2 AST > v1 正则 |
+| H2 | 低置信度时自动附加 `suggestion`：如"v1 正则引擎可能遗漏了复杂表达式，建议尝试 WASM 路径" |
+| H3 | `tool.execute.after` hook 自动注入"补充建议"到 AI 上下文 |
+| H4 | 错误信息结构化：`{ error, type, recoverable, retry_hint }` — AI 可自动决策重试策略 |
 
 ---
 
@@ -120,5 +162,5 @@ Phase 3: DFA + 过程间     → v0.3-v0.5 ✅✅
   ├─ v3 跨函数            → v0.3.0   ✅
   ├─ v4 跨文件            → v0.4.x   ✅
   └─ 完整别名/指针追踪    → v0.5.0   ✅
-Phase 4: 工程化 & 扩展    → v0.6.0   ⬜
+Phase 4: 工程化 & 扩展    → v0.6.0   🔄
 ```

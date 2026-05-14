@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-05-14
+
+### CI 全面打通 🟢 — 18 轮调试后全部通过
+
+**背景**：GitHub 仓库初始化推送后，连续 17 次 CI runs 全部失败。
+
+**调试过程**：
+
+| 轮次 | 问题 | 修复 | commit |
+|------|------|------|--------|
+| #1–#8 | CI 日志不可见 | artifact 上传 + PAT token 下载 | `a077c52`–`806fc34` |
+| #9–#11 | `@types/node` 缺失 | `bun add -d @types/node` | `8fedb2e` |
+| #12–#13 | `@types/bun` 缺失（`import.meta.dir` 是 Bun API） | `bun add -d @types/bun`（替代 @types/node） | `88cec0e` |
+| #14 | build 在 test 之后 → `dist/index.js` 不存在 | 调换 CI 步骤顺序 | `2292dd9` |
+| #15–#17 | `cross-file-dfa.test.ts:259` 依赖 Map 遍历顺序，Linux 上不同 | 用 `.filter(f => callGraph.has(f))` 而非取第一个 key | `924dedf` |
+
+**根因 4 类**：
+1. **类型系统**：`tsc` 独立于 Bun runtime，需要显式安装 `@types/node` 和 `@types/bun`
+2. **CI 步骤顺序**：test 依赖 build 产物，必须先 build
+3. **平台差异**：Windows (NTFS) vs Linux (ext4) 文件遍历顺序不同 → Map key 顺序不同
+4. **日志透明性**：GitHub Actions API 返回 403 → artifact 上传 + PAT token 下载
+
+**产出**：
+- `PM/knowledge-base/CI_TROUBLESHOOTING.md` — 完整排故知识库
+- `STATUS_DASHBOARD.md` — CI 状态 🟢
+- `CHANGELOG.md` — v0.5.1 追加
+- CI Run #18: **全部通过 🟢**
+
+**教训**：
+- 每次只改一处，确认效果再动下一处（否则多个问题互相掩盖）
+- Bun runtime ≠ `tsc` 编译器 — TypeScript 类型检查需要独立的类型包
+- `Map.keys()` 顺序是插入顺序，当 key 来自文件遍历结果时不可靠
+
+---
+
 ## 2026-05-13
 
 ### v0.5.0 发布 — Phase 3 收官 ✅

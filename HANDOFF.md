@@ -1,5 +1,5 @@
 # HANDOFF CONTEXT — v0.5.0 (跨文件去重 + 指针链增强)
-> 生成日期: 2026-05-14 | 最后操作: P3 完工：228 tests, CI/CD 上线, as any 收敛
+> 生成日期: 2026-05-14 | 最后操作: CI 🟢 Run #18 全部通过 — 17 次失败后修复 | 详见 `PM/knowledge-base/CI_TROUBLESHOOTING.md`
 
 ---
 
@@ -22,7 +22,7 @@
 | 插件版本 | **v0.5.0** |
 | 测试总数 | **228 pass, 0 fail, 695 expect() calls, 13 files** |
 | WASM 环境 | wasmAvailable=true，resolveWasmPaths() 正常工作 |
-| 构建状态 | bun run tsc --noEmit ✅ / bun build ✅ |
+| 构建状态 | bun run type-check ✅ / bun build ✅ |
 | 注册工具 | 8 个（含 trace_variable） |
 
 ### 四层 DFA 管线真实状态

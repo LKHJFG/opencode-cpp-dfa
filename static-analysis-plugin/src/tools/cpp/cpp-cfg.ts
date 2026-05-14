@@ -14,7 +14,7 @@ export { type BlockId, type Statement, type BasicBlock, type ControlFlowGraph, p
 
 // Matches variable declarations: int a; int a = 10; int a = b + 1;
 // Also handles: MyClass obj; std::vector<int> v; unsigned long long x; const int* p;
-const DECL_PATTERN = /\b(?:(?:constexpr|const|unsigned|signed|long|short|static)\s+)*(?:int|float|double|char|bool|auto|string|void|size_t|std::\w+(?:::\w+)*(?:<[^>]*>+)?|[A-Za-z_]\w*(?:<[^>]*>+)?)\s*\*{0,2}\s*&?\s*(\w+)\s*(?:=\s*([^;{]+))?/
+const DECL_PATTERN = /\b(?:(?:constexpr|const|unsigned|signed|long|short|static)\s+)*(?:int|float|double|char|bool|auto|string|void|size_t|std::\w+(?:::\w+)*(?:<[^>]*>+)?|(?:[A-Za-z_]\w*(?:<[^>]*>+)?)(?!\w))\s*\*{0,2}\s*&?\s*(\w+)\s*(?:\[[^\]]*\])?\s*(?:=\s*([^;{]+))?/
 
 // Matches plain assignments: a = b + 1; a += 2; *ptr = val; arr[idx] = val; ptr->member = val;
 const ASSIGN_PATTERN = /^(\*{0,2}\s*\w+(?:\s*\.\s*\w+(?:\[[^\]]*\])?)*(?:\s*->\s*\w+(?:\[[^\]]*\])?)?(?:\[[^\]]*\])?)\s*([+\-*/%&|^<>]=?|=(?!=))\s*([^;]*)/
@@ -151,14 +151,20 @@ function parseLine(line: string, lineNum: number): Statement | null {
   const assignMatch = code.match(ASSIGN_PATTERN)
   if (assignMatch) {
     const target = assignMatch[1]!
+    const op = assignMatch[2]!
     const rhs = assignMatch[3]!
-    return {
-      type: "assignment",
-      text: code,
-      line: lineNum,
-      column: trimmed.indexOf(code[0]!) + 1,
-      defVars: [normalizeDefVar(target)],
-      useVars: extractUsedVars(rhs),
+    // Reject when - is part of -> (e.g. ptr->method())
+    if (op === "-" && rhs.startsWith(">")) {
+      // falls through to function_call or expression parsing
+    } else {
+      return {
+        type: "assignment",
+        text: code,
+        line: lineNum,
+        column: trimmed.indexOf(code[0]!) + 1,
+        defVars: [normalizeDefVar(target)],
+        useVars: extractUsedVars(rhs),
+      }
     }
   }
 
@@ -279,9 +285,12 @@ export function buildCFG(sourceLines: string[], functionName: string = "global")
   // Create entry block
   startNewBlock("entry", 1)
 
+  let skipParseLine = false
+
   for (let i = 0; i < sourceLines.length; i++) {
     const lineNum = i + 1
     const line = sourceLines[i]!
+    skipParseLine = false
 
     // Detect function definition start (heuristic)
     if (!inFunction) {
@@ -293,8 +302,9 @@ export function buildCFG(sourceLines: string[], functionName: string = "global")
       if (funcMatch && opensBrace(line) && braceDepth === 0) {
         inFunction = true
         functionBraceDepth = braceDepth + netBraceCount(line)
-        // finalize entry block if needed
         finalizeCurrentBlock(lineNum - 1)
+        const isOneLiner = opensBrace(line) && closesBrace(line)
+        if (!isOneLiner) skipParseLine = true
       }
     }
 
@@ -302,7 +312,8 @@ export function buildCFG(sourceLines: string[], functionName: string = "global")
 
     // Detect control flow structures
     const isIfStatement = /^if\s*\(/.test(trimmed)
-    const isElseStatement = /^else/.test(trimmed)
+    const isCloseElse = /^}\s*else\b/.test(trimmed)
+    const isElseStatement = /^else/.test(trimmed) || isCloseElse
     const isForStatement = /^for\s*\(/.test(trimmed)
     const isWhileStatement = /^while\s*\(/.test(trimmed)
     const isSwitchStatement = /^switch\s*\(/.test(trimmed)
@@ -391,15 +402,17 @@ export function buildCFG(sourceLines: string[], functionName: string = "global")
       braceDepth += braceDelta
     }
 
-    // Parse regular statements
-    const stmt = parseLine(line, lineNum)
-    if (stmt) {
-      try {
-        const block = getCurrentBlock()
-        block.statements.push(stmt)
-        block.endLine = lineNum
-      } catch {
-        // No current block, skip
+    // Parse regular statements (skip function signature line)
+    if (!skipParseLine) {
+      const stmt = parseLine(line, lineNum)
+      if (stmt) {
+        try {
+          const block = getCurrentBlock()
+          block.statements.push(stmt)
+          block.endLine = lineNum
+        } catch {
+          // No current block, skip
+        }
       }
     }
   }
