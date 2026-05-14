@@ -28,13 +28,18 @@ jobs:
 
       - run: bun install
 
-      - name: Debug node_modules
-        run: |
-          ls node_modules/.bin/ | head -20
-          node_modules/.bin/tsc --version 2>&1 || echo "tsc not found"
-          bun --version
       - name: Type check
-        run: node_modules/.bin/tsc --noEmit 2>&1
+        run: |
+          echo "=== tsc version ==="
+          node_modules/.bin/tsc --version
+          echo "=== tsconfig ==="
+          cat tsconfig.json
+          echo "=== source files ==="
+          find src -name '*.ts' -not -path '*/__tests__/*' | sort
+          echo "=== tsc with verbose ==="
+          node_modules/.bin/tsc --noEmit --verbose 2>&1 || true
+          echo "=== tsc strict ==="
+          node_modules/.bin/tsc --noEmit 2>&1; ec=$?; echo "EXIT_CODE=$ec"; exit $ec
 
       - name: Run tests
         run: bun test
